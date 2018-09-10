@@ -17,7 +17,7 @@ from seq2seq.util.checkpoint import Checkpoint
 try:
     raw_input          # Python 2
 except NameError:
-raw_input = input  # Python 3
+    raw_input = input  # Python 3
 
 # Sample usage:
 #     # training
