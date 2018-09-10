@@ -8,9 +8,9 @@ from sklearn.model_selection import train_test_split
 from collections import Counter
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dir', help="data directory", default="data")
+parser.add_argument('--dir', help="data directory", default="../data")
 parser.add_argument('--max-len', help="max sequence length", default=10)
-parser.add_argument('--data_path', help="paraphrase data path", default='paraphrase_data/PIT_2015_SYSTEM.csv')
+parser.add_argument('--data_path', help="paraphrase data path", default='../paraphrase_data/PIT_2015_SYSTEM.csv')
 args = parser.parse_args()
 
 
