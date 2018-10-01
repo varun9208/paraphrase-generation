@@ -3,11 +3,14 @@ import argparse
 import logging
 import spacy
 import torch
+import pickle
+import csv
+import datetime
 from torch.optim.lr_scheduler import StepLR
 import torchtext
 import seq2seq
 from seq2seq.trainer import SupervisedTrainer
-from seq2seq.models import EncoderRNN, DecoderRNN, Seq2seq
+from seq2seq.models import EncoderRNN, DecoderRNN, Seq2seq, TopKDecoder
 from seq2seq.loss import Perplexity
 from seq2seq.optim import Optimizer
 from seq2seq.dataset import SourceField, TargetField
@@ -15,7 +18,7 @@ from seq2seq.evaluator import Predictor
 from seq2seq.util.checkpoint import Checkpoint
 
 try:
-    raw_input          # Python 2
+    raw_input  # Python 2
 except NameError:
     raw_input = input  # Python 3
 
@@ -37,7 +40,7 @@ parser.add_argument('--expt_dir', action='store', dest='expt_dir', default='./ex
 parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint',
                     help='The name of the checkpoint to load, usually an encoded time string')
 parser.add_argument('--resume', action='store_true', dest='resume',
-                    default=False,
+                    default=True,
                     help='Indicates if training has to be resumed from the latest checkpoint')
 parser.add_argument('--log-level', dest='log_level',
                     default='info',
@@ -45,13 +48,15 @@ parser.add_argument('--log-level', dest='log_level',
 
 opt = parser.parse_args()
 spacy_en = spacy.load('en')
+csv.field_size_limit(15000000)
 
 LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
 logging.info(opt)
 
 if opt.load_checkpoint is not None:
-    logging.info("loading checkpoint from {}".format(os.path.join(opt.expt_dir, Checkpoint.CHECKPOINT_DIR_NAME, opt.load_checkpoint)))
+    logging.info("loading checkpoint from {}".format(
+        os.path.join(opt.expt_dir, Checkpoint.CHECKPOINT_DIR_NAME, opt.load_checkpoint)))
     checkpoint_path = os.path.join(opt.expt_dir, Checkpoint.CHECKPOINT_DIR_NAME, opt.load_checkpoint)
     checkpoint = Checkpoint.load(checkpoint_path)
     seq2seq = checkpoint.model
@@ -60,26 +65,46 @@ if opt.load_checkpoint is not None:
 else:
     def tokenizer(text):  # create a tokenizer function
         return [tok.text for tok in spacy_en.tokenizer(text)]
+
+
     def len_filter(example):
-        return len(example.src) <= max_len and len(example.tgt) <= max_len
+        try:
+            hel = example.src
+            hel_1 = example.tgt
+            # print('Src')
+            # print(example.src)
+            # print('Tgt')
+            # print(example.tgt)
+        except Exception as E:
+            print(example.src)
+        return len(example.src) <= max_len and len(example.tgt) <= max_len and len(example.src) > 0 and len(example.tgt) > 0
+        # return True
+
 
     # Prepare dataset
     src = SourceField()
     tgt = TargetField()
-    # src = torchtext.data.Field(sequential=True, tokenize=tokenizer, lower=True, use_vocab=True)
-    # tgt = torchtext.data.Field(sequential=True, tokenize=tokenizer, lower=True, use_vocab=True)
     max_len = 50
 
+    print('Program started at ' + str(datetime.datetime.now()))
+
+    #approx 3 minute for creating train data
     train = torchtext.data.TabularDataset(
         path=opt.train_path, format='tsv',
         fields=[('src', src), ('tgt', tgt)],
         filter_pred=len_filter
     )
+
+    print('TRaining data done processing at  ' + str(datetime.datetime.now()))
+    # approx 1 minute for creating dev data
     dev = torchtext.data.TabularDataset(
         path=opt.dev_path, format='tsv',
         fields=[('src', src), ('tgt', tgt)],
         filter_pred=len_filter
     )
+        # pickle.dump(dev, open('dev.pkl', 'wb'))
+    print('Dev data done processing at  ' + str(datetime.datetime.now()))
+
     src.build_vocab(train, max_size=1000000)
     tgt.build_vocab(train, max_size=1000000)
     input_vocab = src.vocab
@@ -92,6 +117,7 @@ else:
     # seq2seq.tgt_field_name = 'tgt'
 
     # Prepare loss
+    # approx 2 minute for initialization of seq2seq model
     weight = torch.ones(len(tgt.vocab))
     pad = tgt.vocab.stoi[tgt.pad_token]
     loss = Perplexity(weight, pad)
@@ -102,7 +128,7 @@ else:
     optimizer = None
     if not opt.resume:
         # Initialize model
-        hidden_size=128
+        hidden_size = 1
         bidirectional = True
         encoder = EncoderRNN(len(src.vocab), max_len, hidden_size, n_layers=5,
                              bidirectional=bidirectional, variable_lengths=True)
@@ -124,19 +150,29 @@ else:
         # optimizer.set_scheduler(scheduler)
 
     # train
-    t = SupervisedTrainer(loss=loss, batch_size=32,
+    print('Initailization of seq2seq is done ' + str(datetime.datetime.now()))
+    t = SupervisedTrainer(loss=loss, batch_size=100,
                           checkpoint_every=50,
                           print_every=10, expt_dir=opt.expt_dir)
+    print('Initailization of supervisor trainer is done ' + str(datetime.datetime.now()))
 
     seq2seq = t.train(seq2seq, train,
-                      num_epochs=6, dev_data=dev,
+                      num_epochs=1, dev_data=dev,
                       optimizer=optimizer,
                       teacher_forcing_ratio=0.5,
-                      resume=opt.resume)
+                      resume=opt.resume, make_lower_string = True)
+    print('Training og  seq2seq is done ' + str(datetime.datetime.now()))
 
-predictor = Predictor(seq2seq, input_vocab, output_vocab)
+beam_search = Seq2seq(seq2seq.encoder, TopKDecoder(seq2seq.decoder, 5))
+try:
+    pickle.dump(beam_search, open('seq2seqmodel.pkl', 'wb'))
+except:
+    print('Model not saved')
+print('model saved')
+predictor_beam = Predictor(beam_search, input_vocab, output_vocab)
+# predictor = Predictor(seq2seq, input_vocab, output_vocab)
 
 while True:
     seq_str = raw_input("Type in a source sequence:")
     seq = seq_str.strip().split()
-    print(predictor.predict(seq))
+    print(predictor_beam.predict(seq))

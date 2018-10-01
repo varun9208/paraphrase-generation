@@ -89,6 +89,8 @@ class TopKDecoder(torch.nn.Module):
         inputs, batch_size, max_length = self.rnn._validate_args(inputs, encoder_hidden, encoder_outputs,
                                                                  function, teacher_forcing_ratio)
 
+        self._max_length_of_output = max_length
+
         self.pos_index = Variable(torch.LongTensor(range(batch_size)) * self.k).view(-1, 1)
 
         # Inflate the initial hidden states to be of size: b*k x h
@@ -238,7 +240,8 @@ class TopKDecoder(torch.nn.Module):
         batch_eos_found = [0] * b   # the number of EOS found
                                     # in the backward loop below for each batch
 
-        t = self.rnn.max_length - 1
+        t = self._max_length_of_output - 1
+        # t = self.rnn.max_length - 1
         # initialize the back pointer with the sorted order of the last step beams.
         # add self.pos_index for indexing variable with b*k as the first dimension.
         t_predecessors = (sorted_idx + self.pos_index.expand_as(sorted_idx)).view(b * self.k)

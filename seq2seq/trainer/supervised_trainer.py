@@ -140,7 +140,7 @@ class SupervisedTrainer(object):
 
     def train(self, model, data, num_epochs=5,
               resume=False, dev_data=None,
-              optimizer=None, teacher_forcing_ratio=0):
+              optimizer=None, teacher_forcing_ratio=0, make_lower_string = False):
         """ Run training for a given model.
 
         Args:
