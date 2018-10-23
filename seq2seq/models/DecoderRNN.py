@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 import torch.nn.functional as F
 
-from .attention import Attention
+from .attention import Attention, PointerAttention
 from .baseRNN import BaseRNN
 
 if torch.cuda.is_available():
@@ -31,7 +31,7 @@ class DecoderRNN(BaseRNN):
         bidirectional (bool, optional): if the encoder is bidirectional (default False)
         input_dropout_p (float, optional): dropout probability for the input sequence (default: 0)
         dropout_p (float, optional): dropout probability for the output sequence (default: 0)
-        use_attention(bool, optional): flag indication whether to use attention mechanism or not (default: false)
+        attention(str, optional): (default: false) or can be global or pointer
 
     Attributes:
         KEY_ATTN_SCORE (str): key used to indicate attention weights in `ret_dict`
@@ -68,7 +68,7 @@ class DecoderRNN(BaseRNN):
     def __init__(self, vocab_size, max_len, hidden_size,
             sos_id, eos_id,
             n_layers=1, rnn_cell='gru', bidirectional=False,
-            input_dropout_p=0, dropout_p=0, use_attention=False):
+            input_dropout_p=0, dropout_p=0, attention=None):
         super(DecoderRNN, self).__init__(vocab_size, max_len, hidden_size,
                 input_dropout_p, dropout_p,
                 n_layers, rnn_cell)
@@ -78,28 +78,40 @@ class DecoderRNN(BaseRNN):
 
         self.output_size = vocab_size
         self.max_length = max_len
-        self.use_attention = use_attention
+        self.attention = attention
         self.eos_id = eos_id
         self.sos_id = sos_id
 
         self.init_input = None
 
         self.embedding = nn.Embedding(self.output_size, self.hidden_size)
-        if use_attention:
+        if attention == 'global':
             self.attention = Attention(self.hidden_size)
-
-        self.out = nn.Linear(self.hidden_size, self.output_size)
+            self.out = nn.Linear(self.hidden_size, self.output_size)
+        elif attention == 'pointer':
+            self.attention = PointerAttention(self.hidden_size)
+            self.out = lambda x: x
+        elif attention is None:
+            self.attention = None
+            self.out = nn.Linear(self.hidden_size, self.output_size)
+        else:
+            raise ValueError("Attention type: %s is not supported." % attention)
 
     def forward_step(self, input_var, hidden, encoder_outputs, function):
+        # Input_var(batch_size*output_size*bidirectional)
+        # encoder_outputs(batch_size*layers_in_encoders*bidirectional)
+        # hidden(layer*layers_in_encoders*bidirectional)
         batch_size = input_var.size(0)
         output_size = input_var.size(1)
+        # embedded = (batchsize*outputsize)
         embedded = self.embedding(input_var)
         embedded = self.input_dropout(embedded)
 
         output, hidden = self.rnn(embedded, hidden)
+        # output (batch_size**hidden_size)
 
         attn = None
-        if self.use_attention:
+        if self.attention is not None:
             output, attn = self.attention(output, encoder_outputs)
 
         predicted_softmax = function(self.out(output.contiguous().view(-1, self.hidden_size)), dim=1).view(batch_size, output_size, -1)
@@ -108,7 +120,9 @@ class DecoderRNN(BaseRNN):
     def forward(self, inputs=None, encoder_hidden=None, encoder_outputs=None,
                     function=F.log_softmax, teacher_forcing_ratio=0):
         ret_dict = dict()
-        if self.use_attention:
+        if self.attention is not None:
+            if encoder_outputs is None:
+                raise ValueError("Argument encoder_outputs cannot be None when attention is used.")
             ret_dict[DecoderRNN.KEY_ATTN_SCORE] = list()
 
         inputs, batch_size, max_length = self._validate_args(inputs, encoder_hidden, encoder_outputs,
@@ -123,7 +137,7 @@ class DecoderRNN(BaseRNN):
 
         def decode(step, step_output, step_attn):
             decoder_outputs.append(step_output)
-            if self.use_attention:
+            if self.attention is not None:
                 ret_dict[DecoderRNN.KEY_ATTN_SCORE].append(step_attn)
             symbols = decoder_outputs[-1].topk(1)[1]
             sequence_symbols.append(symbols)
@@ -182,7 +196,7 @@ class DecoderRNN(BaseRNN):
         return h
 
     def _validate_args(self, inputs, encoder_hidden, encoder_outputs, function, teacher_forcing_ratio):
-        if self.use_attention:
+        if self.attention is not None:
             if encoder_outputs is None:
                 raise ValueError("Argument encoder_outputs cannot be None when attention is used.")
 

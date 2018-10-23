@@ -3,12 +3,10 @@ import argparse
 import logging
 import spacy
 import torch
-import pickle
 import csv
 import datetime
 from torch.optim.lr_scheduler import StepLR
 import torchtext
-import seq2seq
 from seq2seq.trainer import SupervisedTrainer
 from seq2seq.models import EncoderRNN, DecoderRNN, Seq2seq, TopKDecoder
 from seq2seq.loss import Perplexity
@@ -85,6 +83,7 @@ else:
     src = SourceField()
     tgt = TargetField()
     max_len = 50
+    layers = 10
 
     print('Program started at ' + str(datetime.datetime.now()))
 
@@ -96,6 +95,7 @@ else:
     )
 
     print('TRaining data done processing at  ' + str(datetime.datetime.now()))
+    print('Total training samples are  ' + str(len(train.examples)))
     # approx 1 minute for creating dev data
     dev = torchtext.data.TabularDataset(
         path=opt.dev_path, format='tsv',
@@ -103,6 +103,7 @@ else:
         filter_pred=len_filter
     )
         # pickle.dump(dev, open('dev.pkl', 'wb'))
+    print('Total dev samples are  ' + str(len(dev.examples)))
     print('Dev data done processing at  ' + str(datetime.datetime.now()))
 
     src.build_vocab(train, max_size=1000000)
@@ -128,12 +129,12 @@ else:
     optimizer = None
     if not opt.resume:
         # Initialize model
-        hidden_size = 1
+        hidden_size = 1000
         bidirectional = True
-        encoder = EncoderRNN(len(src.vocab), max_len, hidden_size, n_layers=5,
+        encoder = EncoderRNN(len(src.vocab), max_len, hidden_size, n_layers=layers,
                              bidirectional=bidirectional, variable_lengths=True)
         decoder = DecoderRNN(len(tgt.vocab), max_len, hidden_size * 2 if bidirectional else hidden_size,
-                             dropout_p=0.2, n_layers=5, use_attention=True, bidirectional=bidirectional,
+                             dropout_p=0.2, n_layers=layers, attention='global', bidirectional=bidirectional,
                              eos_id=tgt.eos_id, sos_id=tgt.sos_id)
         seq2seq = Seq2seq(encoder, decoder)
         if torch.cuda.is_available():
@@ -144,31 +145,26 @@ else:
 
         # Optimizer and learning rate scheduler can be customized by
         # explicitly constructing the objects and pass to the trainer.
-        #
-        # optimizer = Optimizer(torch.optim.Adam(seq2seq.parameters()), max_grad_norm=5)
-        # scheduler = StepLR(optimizer.optimizer, 1)
-        # optimizer.set_scheduler(scheduler)
+
+        optimizer = Optimizer(torch.optim.Adam(seq2seq.parameters()), max_grad_norm=5)
+        scheduler = StepLR(optimizer.optimizer, 1)
+        optimizer.set_scheduler(scheduler)
 
     # train
     print('Initailization of seq2seq is done ' + str(datetime.datetime.now()))
-    t = SupervisedTrainer(loss=loss, batch_size=100,
+    t = SupervisedTrainer(loss=loss, batch_size=1,
                           checkpoint_every=50,
                           print_every=10, expt_dir=opt.expt_dir)
     print('Initailization of supervisor trainer is done ' + str(datetime.datetime.now()))
 
     seq2seq = t.train(seq2seq, train,
-                      num_epochs=1, dev_data=dev,
+                      num_epochs=2, dev_data=dev,
                       optimizer=optimizer,
-                      teacher_forcing_ratio=0.5,
-                      resume=opt.resume, make_lower_string = True)
-    print('Training og  seq2seq is done ' + str(datetime.datetime.now()))
+                      teacher_forcing_ratio=1.0,
+                      resume=opt.resume)
+    print('Training of seq2seq is done ' + str(datetime.datetime.now()))
 
 beam_search = Seq2seq(seq2seq.encoder, TopKDecoder(seq2seq.decoder, 5))
-try:
-    pickle.dump(beam_search, open('seq2seqmodel.pkl', 'wb'))
-except:
-    print('Model not saved')
-print('model saved')
 predictor_beam = Predictor(beam_search, input_vocab, output_vocab)
 # predictor = Predictor(seq2seq, input_vocab, output_vocab)
 
