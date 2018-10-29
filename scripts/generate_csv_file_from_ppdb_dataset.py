@@ -6,12 +6,13 @@ import string
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dir', help="data directory", default="../data")
-parser.add_argument('--max-len', help="max sequence length", default=10)
-parser.add_argument('--data_path', help="paraphrase data path", default='../paraphrase_data/PIT_2015_SYSTEM.csv')
+parser.add_argument('--max-len', help="max sequence length", default=20)
+# parser.add_argument('--data_path', help="paraphrase data path", default='../paraphrase_data/PIT_2015_SYSTEM.csv')
+parser.add_argument('--data_path', help="paraphrase data path", default='../paraphrase_data/PPDB_XL_SYSTEM.csv')
 args = parser.parse_args()
 
 
-def read_text_file(paraphrase_corpus_file='', new_csv_file_name='PPDB_CSV_DATASET'):
+def read_text_file(paraphrase_corpus_file='', new_csv_file_name='PPDB_XL_CSV_DATASET'):
     """
     This function will read paraphrase ppdb corpus file and return the samples
     :param paraphrase_corpus_file: original ppdb file path with name
@@ -30,8 +31,8 @@ def read_text_file(paraphrase_corpus_file='', new_csv_file_name='PPDB_CSV_DATASE
             print('Line Number = ' + str(k))
             k = k + 1
             samples = line.split('|||')
-            sentence_1.append(samples[1].lower().translate(None, string.punctuation).strip())
-            sentence_2.append(samples[2].lower().translate(None, string.punctuation).strip())
+            sentence_1.append(samples[1].lower().translate(str.maketrans('', '', string.punctuation)).strip())
+            sentence_2.append(samples[2].lower().translate(str.maketrans('', '', string.punctuation)).strip())
 
         print('Sentences generated')
 
@@ -46,4 +47,5 @@ def read_text_file(paraphrase_corpus_file='', new_csv_file_name='PPDB_CSV_DATASE
 
 if __name__ == '__main__':
     # read_text_file('PPDB_trail_dataset')
-    read_text_file('ppdb-full')
+    # read_text_file('ppdb-full')
+    read_text_file('ppdb-2.0-xl-all')

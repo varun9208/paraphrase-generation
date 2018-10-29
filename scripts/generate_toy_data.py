@@ -8,9 +8,9 @@ from collections import Counter
 parser = argparse.ArgumentParser()
 # parser.add_argument('--dir', help="data directory", default="../data")
 parser.add_argument('--dir', help="data directory", default="../ppdb_data")
-parser.add_argument('--max-len', help="max sequence length", default=10)
+parser.add_argument('--max-len', help="max sequence length", default=20)
 # parser.add_argument('--data_path', help="paraphrase data path", default='../paraphrase_data/PIT_2015_SYSTEM.csv')
-parser.add_argument('--data_path', help="paraphrase data path", default='../paraphrase_data/PPDB_CSV_DATASET.csv')
+parser.add_argument('--data_path', help="paraphrase data path", default='../paraphrase_data/PPDB_XL_CSV_DATASET.csv')
 args = parser.parse_args()
 
 
@@ -115,11 +115,19 @@ def generate_dataset_translation(root):
 
         # generate vocabulary
         src_vocab = os.path.join(os.path.join(root, dataset_dir), 'vocab.source')
+        common_vocab_counter = src_vocab_counter + tgt_vocab_counter
+        top_most_common_vocab_list = list(common_vocab_counter)
+        common_vocab = os.path.join(os.path.join(root, dataset_dir), 'vocab.common')
         with open(src_vocab, 'w') as fout:
             fout.write("\n".join(list(src_vocab_counter.keys())))
         tgt_vocab = os.path.join(os.path.join(root, dataset_dir), 'vocab.target')
         with open(tgt_vocab, 'w') as fout:
             fout.write("\n".join(list(tgt_vocab_counter.keys())))
+        with open(common_vocab, 'w') as fout:
+            if len(top_most_common_vocab_list) > 30000:
+                fout.write("\n".join(top_most_common_vocab_list[0:30000]))
+            else:
+                fout.write("\n".join(top_most_common_vocab_list))
 
 if __name__ == '__main__':
     data_dir = args.dir
@@ -127,7 +135,7 @@ if __name__ == '__main__':
         os.mkdir(data_dir)
 
     # toy_dir = os.path.join(data_dir, 'paraphrase_dataset')
-    toy_dir = os.path.join(data_dir, 'ppdb_paraphrase_dataset')
+    toy_dir = os.path.join(data_dir, 'ppdb_paraphrase_xl_dataset')
     if not os.path.exists(toy_dir):
         os.mkdir(toy_dir)
 

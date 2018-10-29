@@ -52,6 +52,7 @@ class Attention(nn.Module):
         self.mask = mask
 
     def forward(self, output, context):
+        # output is previous output from decoder cell.
         batch_size = output.size(0)
         hidden_size = output.size(2)
         input_size = context.size(1)
@@ -62,14 +63,17 @@ class Attention(nn.Module):
         attn = F.softmax(attn.view(-1, input_size), dim=1).view(batch_size, -1, input_size)
 
         # (batch, out_len, in_len) * (batch, in_len, dim) -> (batch, out_len, dim)
+        # Here we are updating the context vector by multiplying it with attentions weight.
         mix = torch.bmm(attn, context)
         # torch.bmm Performs a batch matrix-matrix product of matrices stored in attn and context.)
 
         # concat -> (batch, out_len, 2*dim)
+        # combine updated context vector and output of rnn.
         combined = torch.cat((mix, output), dim=2)
         # output -> (batch, out_len, dim)
+
+        # Confirm this line (Is it like a feed forward network where we are passing combined input to get one word)
         output = F.tanh(self.linear_out(combined.view(-1, 2 * hidden_size))).view(batch_size, -1, hidden_size)
-        # F.tanh(self.linear_out(output.view(-1, 2 * hidden_size))).view(batch_size, -1, hidden_size)
         # Returns a new tensor with the same data as the self tensor but of a different size.
 
         return output, attn
@@ -90,20 +94,6 @@ class PointerAttention(nn.Module):
         super(PointerAttention, self).__init__()
         self.linear_out = nn.Linear(dim, dim)
         self.mask = None
-    # def forward(self, output, context):
-    #     batch_size = output.size(0)
-    #     hidden_size = output.size(2)
-    #     out_len = output.size(1)
-    #     in_len = context.size(1)
-    #     # (batch_size, out_len, dim) -> (batch_size * out_len, dim) -> (batch_size * out_len, dim)
-    #     dec = self.dec_linear(output.contiguous().view(-1, hidden_size))
-    #     dec = dec.contiguous().view(batch_size, out_len, 1, hidden_size).expand(batch_size, out_len, in_len, hidden_size)
-    #     # (batch_size, in_len, dim) - > (batch_size * in_len, dim) -> (batch_size * in_len, dim)
-    #     enc = self.enc_linear(context.contiguous().view(-1, hidden_size))
-    #     enc = enc.contiguous().view(batch_size, 1, in_len, hidden_size).expand(batch_size, out_len, in_len, hidden_size)
-    #     # (batch_size, out_len, in_len, dim) -> (batch_size, out_len, in_len)
-    #     attn = self.out_linear((F.tanh(enc + dec).view(-1, hidden_size))).view(batch_size, out_len, in_len)
-    #     return attn, attn
 
     def forward(self, output, context):
         batch_size = output.size(0)

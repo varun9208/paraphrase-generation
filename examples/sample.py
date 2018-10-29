@@ -38,7 +38,7 @@ parser.add_argument('--expt_dir', action='store', dest='expt_dir', default='./ex
 parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint',
                     help='The name of the checkpoint to load, usually an encoded time string')
 parser.add_argument('--resume', action='store_true', dest='resume',
-                    default=True,
+                    default=False,
                     help='Indicates if training has to be resumed from the latest checkpoint')
 parser.add_argument('--log-level', dest='log_level',
                     default='info',
@@ -94,7 +94,7 @@ else:
         filter_pred=len_filter
     )
 
-    print('TRaining data done processing at  ' + str(datetime.datetime.now()))
+    print('Taining data done processing at  ' + str(datetime.datetime.now()))
     print('Total training samples are  ' + str(len(train.examples)))
     # approx 1 minute for creating dev data
     dev = torchtext.data.TabularDataset(
@@ -106,10 +106,13 @@ else:
     print('Total dev samples are  ' + str(len(dev.examples)))
     print('Dev data done processing at  ' + str(datetime.datetime.now()))
 
-    src.build_vocab(train, max_size=1000000)
-    tgt.build_vocab(train, max_size=1000000)
+    src.build_vocab(train, max_size=30000)
+    tgt.build_vocab(train, max_size=30000, include_source_vocab=True)
     input_vocab = src.vocab
     output_vocab = tgt.vocab
+
+    #stoi = source word to index
+    #itos = index to source
 
     # NOTE: If the source field name and the target field name
     # are different from 'src' and 'tgt' respectively, they have
@@ -129,13 +132,18 @@ else:
     optimizer = None
     if not opt.resume:
         # Initialize model
-        hidden_size = 1000
-        bidirectional = True
-        encoder = EncoderRNN(len(src.vocab), max_len, hidden_size, n_layers=layers,
-                             bidirectional=bidirectional, variable_lengths=True)
-        decoder = DecoderRNN(len(tgt.vocab), max_len, hidden_size * 2 if bidirectional else hidden_size,
-                             dropout_p=0.2, n_layers=layers, attention='global', bidirectional=bidirectional,
+        hidden_size = 512
+        # encoder = EncoderRNN(len(src.vocab), max_len, hidden_size, n_layers=layers,
+        #                      bidirectional=True, variable_lengths=True)
+        # decoder = DecoderRNN(len(tgt.vocab), max_len, hidden_size * 2 if bidirectional else hidden_size,
+        #                      dropout_p=0.2, n_layers=layers, attention='global', bidirectional=bidirectional,
+        #                      eos_id=tgt.eos_id, sos_id=tgt.sos_id)
+        encoder = EncoderRNN(len(tgt.vocab), max_len, hidden_size, n_layers=layers,
+                             bidirectional=True, variable_lengths=True)
+        decoder = DecoderRNN(len(tgt.vocab), max_len, hidden_size,
+                             dropout_p=0.2, n_layers=layers, attention='global', bidirectional=False,
                              eos_id=tgt.eos_id, sos_id=tgt.sos_id)
+
         seq2seq = Seq2seq(encoder, decoder)
         if torch.cuda.is_available():
             seq2seq.cuda()

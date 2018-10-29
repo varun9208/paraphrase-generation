@@ -81,6 +81,7 @@ class DecoderRNN(BaseRNN):
         self.attention = attention
         self.eos_id = eos_id
         self.sos_id = sos_id
+        self.attention_type = attention
 
         self.init_input = None
 
@@ -99,6 +100,7 @@ class DecoderRNN(BaseRNN):
 
     def forward_step(self, input_var, hidden, encoder_outputs, function):
         # Input_var(batch_size*output_size*bidirectional)
+        #input_var is original output. we need to check its output size that's why we need it here.
         # encoder_outputs(batch_size*layers_in_encoders*bidirectional)
         # hidden(layer*layers_in_encoders*bidirectional)
         batch_size = input_var.size(0)
@@ -114,11 +116,13 @@ class DecoderRNN(BaseRNN):
         if self.attention is not None:
             output, attn = self.attention(output, encoder_outputs)
 
+        # Here we are doing this to find the probability of all the words which exist in target vocab. Function is F.log_softmax
         predicted_softmax = function(self.out(output.contiguous().view(-1, self.hidden_size)), dim=1).view(batch_size, output_size, -1)
+
         return predicted_softmax, hidden, attn
 
     def forward(self, inputs=None, encoder_hidden=None, encoder_outputs=None,
-                    function=F.log_softmax, teacher_forcing_ratio=0):
+                    function=F.log_softmax, teacher_forcing_ratio=0, encoder_input=None):
         ret_dict = dict()
         if self.attention is not None:
             if encoder_outputs is None:
@@ -136,10 +140,20 @@ class DecoderRNN(BaseRNN):
         lengths = np.array([max_length] * batch_size)
 
         def decode(step, step_output, step_attn):
+            # For fetching the index of word from encoder input which needs to be copy over.
+            if self.attention_type == 'pointer':
+                val, ind = torch.max(step_attn, 1)
+                copy_index = int(ind)
+
             decoder_outputs.append(step_output)
+
             if self.attention is not None:
                 ret_dict[DecoderRNN.KEY_ATTN_SCORE].append(step_attn)
-            symbols = decoder_outputs[-1].topk(1)[1]
+            #For copy same word from the encoder.
+            if self.attention_type == 'pointer':
+                symbols = int(encoder_input[:, copy_index])
+            else:
+                symbols = decoder_outputs[-1].topk(1)[1]
             sequence_symbols.append(symbols)
 
             eos_batches = symbols.data.eq(self.eos_id)
@@ -151,19 +165,19 @@ class DecoderRNN(BaseRNN):
 
         # Manual unrolling is used to support random teacher forcing.
         # If teacher_forcing_ratio is True or False instead of a probability, the unrolling can be done in graph
-        if use_teacher_forcing:
-            decoder_input = inputs[:, :-1]
-            decoder_output, decoder_hidden, attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs,
-                                                                     function=function)
 
-            for di in range(decoder_output.size(1)):
-                step_output = decoder_output[:, di, :]
-                if attn is not None:
-                    step_attn = attn[:, di, :]
-                else:
-                    step_attn = None
-                decode(di, step_output, step_attn)
+        # TODO use this new logic for teacher_forcing and training (confirm with Iulian)
+        if use_teacher_forcing:
+            for di in range(max_length):
+                # inputs are original output of decoder
+                decoder_input = inputs[:, di].unsqueeze(1)
+                decoder_output, decoder_hidden, step_attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs,
+                                                                         function=function)
+                step_output = decoder_output.squeeze(1)
+                # final symbol predicted from decoder output
+                symbols = decode(di, step_output, step_attn)
         else:
+            # inputs are original output of decoder
             decoder_input = inputs[:, 0].unsqueeze(1)
             for di in range(max_length):
                 decoder_output, decoder_hidden, step_attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs,
@@ -176,6 +190,37 @@ class DecoderRNN(BaseRNN):
         ret_dict[DecoderRNN.KEY_LENGTH] = lengths.tolist()
 
         return decoder_outputs, decoder_hidden, ret_dict
+
+        # if use_teacher_forcing:
+        #     decoder_input = inputs[:, :-1]
+        #     decoder_output, decoder_hidden, attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs,
+        #                                                              function=function)
+        #     for di in range(decoder_output.size(1)):
+        #         if self.attention_type == 'pointer':
+        #             # Logic for copying same word from encoder input which has highest prob.
+        #             val, ind = torch.max(attn[:, di, :], 1)
+        #             copy_index = int(ind)
+        #             step_output = int(encoder_input[:, copy_index])
+        #         else:
+        #             step_output = decoder_output[:, di, :]
+        #         if attn is not None:
+        #             step_attn = attn[:, di, :]
+        #         else:
+        #             step_attn = None
+        #         decode(di, step_output, step_attn)
+        # else:
+        #     decoder_input = inputs[:, 0].unsqueeze(1)
+        #     for di in range(max_length):
+        #         decoder_output, decoder_hidden, step_attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs,
+        #                                                                  function=function)
+        #         step_output = decoder_output.squeeze(1)
+        #         symbols = decode(di, step_output, step_attn)
+        #         decoder_input = symbols
+        #
+        # ret_dict[DecoderRNN.KEY_SEQUENCE] = sequence_symbols
+        # ret_dict[DecoderRNN.KEY_LENGTH] = lengths.tolist()
+        #
+        # return decoder_outputs, decoder_hidden, ret_dict
 
     def _init_state(self, encoder_hidden):
         """ Initialize the encoder hidden state. """

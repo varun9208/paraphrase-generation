@@ -45,6 +45,7 @@ class EncoderRNN(BaseRNN):
                 input_dropout_p, dropout_p, n_layers, rnn_cell)
 
         self.variable_lengths = variable_lengths
+        self.vocab_size = vocab_size
         self.embedding = nn.Embedding(vocab_size, hidden_size)
         if embedding is not None:
             self.embedding.weight = nn.Parameter(embedding)
@@ -65,7 +66,14 @@ class EncoderRNN(BaseRNN):
             - **output** (batch, seq_len, hidden_size): variable containing the encoded features of the input sequence
             - **hidden** (num_layers * num_directions, batch, hidden_size): variable containing the features in the hidden state h
         """
-        embedded = self.embedding(input_var)
+        #change input_var so that it uses only common vocab
+        updated_input_var = input_var.clone()
+        for idx in range(0, len(updated_input_var.data[0])):
+            if updated_input_var[0][idx] >= self.vocab_size:
+                updated_input_var[0][idx] = 0
+
+        # updated_input_var
+        embedded = self.embedding(updated_input_var)
         embedded = self.input_dropout(embedded)
         if self.variable_lengths:
             embedded = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths, batch_first=True)
