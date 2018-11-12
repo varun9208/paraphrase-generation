@@ -115,6 +115,7 @@ class DecoderRNN(BaseRNN):
 
         output, hidden = self.rnn(embedded, hidden)
         # output (batch_size**hidden_size)
+        #here output is context vector and hidden is final output
 
         attn = None
         if self.attention is not None:
@@ -122,21 +123,29 @@ class DecoderRNN(BaseRNN):
 
 
         if not testing and use_teacher_forcing:
-            if int(input_var) == 0:
-                self.switching_network_model.train_model(encoder_outputs, hidden, torch.FloatTensor([0]))
-            else:
-                self.switching_network_model.train_model(encoder_outputs, hidden, torch.FloatTensor([1]))
+            for x in range(0, input_var.size(0)):
+                temp_hidden = hidden[0][x].view(1,-1)
+                temp_encoder_output = encoder_outputs[x].unsqueeze(0)
+                if int(input_var[x]) == 0:
+                    self.switching_network_model.train_model(temp_encoder_output, temp_hidden, torch.FloatTensor([0]))
+                else:
+                    self.switching_network_model.train_model(temp_encoder_output, temp_hidden, torch.FloatTensor([1]))
         else:
-            prob_of_z_t_1 = self.switching_network_model(encoder_outputs, hidden)
-            prob_of_z_t_1 = float(prob_of_z_t_1)
+            list_of_prob_of_z_t_1 = []
+            for x in range(0, input_var.size(0)):
+                prob_of_z_t_1 = self.switching_network_model(encoder_outputs[x].unsqueeze(0), hidden[0][x].view(1,-1))
+                list_of_prob_of_z_t_1.append(float(prob_of_z_t_1))
 
         # Takes probability of pointer vocab keywords for copy mechanism and to copy word form source sentence
-        self.pointer_vocab_prob = nn.Linear(self.hidden_size, len(list_of_pointer_vocab_for_source_sentences[0]))
-        pointer_vocab_predicted_softmax = function(
-            self.pointer_vocab_prob(output.contiguous().view(-1, self.hidden_size)),
-            dim=1).view(batch_size,
-                        output_size,
-                        -1)
+        list_of_pointer_vocab_predicted_softmax = []
+        for x in range(0, input_var.size(0)):
+            self.pointer_vocab_prob = nn.Linear(self.hidden_size, len(list_of_pointer_vocab_for_source_sentences[x]))
+            pointer_vocab_predicted_softmax = function(
+                self.pointer_vocab_prob(output[x].unsqueeze(0).contiguous().view(-1, self.hidden_size)),
+                dim=1).view(1,
+                            output_size,
+                            -1)
+            list_of_pointer_vocab_predicted_softmax.append(pointer_vocab_predicted_softmax)
 
         # Here we are doing this to find the probability of all the words in comman vocab. Function is F.log_softmax
         common_vocab_predicted_softmax = function(self.out(updated_output.contiguous().view(-1, self.hidden_size)),
@@ -157,6 +166,7 @@ class DecoderRNN(BaseRNN):
         # Here encoder_inputs is a list of original input to encode which is a vector of indices from pointer vocab of each sentence.
         # list_of_pointer_vocab_for_source_sentences is the list of source pointer vocab
         # encoder_outputs is last output from
+        #encoder_inputs are real input which has pointer input like [35000, 350001, 35002]
 
         ret_dict = dict()
         if self.attention is not None:
@@ -200,15 +210,21 @@ class DecoderRNN(BaseRNN):
             else:
                 symbols = decoder_outputs[-1].topk(1)[1]
 
-            sequence_symbols.append(symbols)
+            if testing:
+                sequence_symbols.append(symbols)
 
-            if not testing and int(symbols) >33000 :
-                #convert it back to unknown with 0 tensor for next input.
-                symbols = torch.LongTensor([0]).unsqueeze(1)
+            else:
+                # This is done so that in evaluation and testing time we will not use pointer replacing it will be replaced by <unk> encoding.
+                for x in range(0, symbols.size(0)):
+                    if not testing and int(symbols[x]) > 33000 :
+                        #convert it back to unknown with 0 tensor for next input.
+                        symbols[x] = torch.LongTensor([0]).unsqueeze(1)
+                sequence_symbols.append(symbols)
 
             eos_batches = symbols.data.eq(self.eos_id)
             if eos_batches.dim() > 0:
                 eos_batches = eos_batches.cpu().view(-1).numpy()
+                update_idx = ((lengths > step) & eos_batches) != 0
                 update_idx = ((lengths > step) & eos_batches) != 0
                 lengths[update_idx] = len(sequence_symbols)
             return symbols

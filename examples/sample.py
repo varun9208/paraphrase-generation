@@ -165,7 +165,7 @@ else:
 
     # train
     print('Initailization of seq2seq is done ' + str(datetime.datetime.now()))
-    t = SupervisedTrainer(loss=loss, batch_size=1,
+    t = SupervisedTrainer(loss=loss, batch_size=4,
                           checkpoint_every=50,
                           print_every=1, expt_dir=opt.expt_dir)
     print('Initailization of supervisor trainer is done ' + str(datetime.datetime.now()))
