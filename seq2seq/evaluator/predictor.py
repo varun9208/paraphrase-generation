@@ -1,5 +1,6 @@
 import torch
 from torch.autograd import Variable
+import re
 
 
 class Predictor(object):
@@ -26,14 +27,39 @@ class Predictor(object):
     def set_pointer_vocab(self, pointer_vocab):
         self.ptr_vocab = pointer_vocab
 
+    def create_pointer_vocab(self, seq_str):
+        seq = seq_str.strip()
+        list_of_words_in_source_sentence = re.sub("[^\w]", " ", seq).split()
+        unique_words = []
+        for x in list_of_words_in_source_sentence:
+            if x not in unique_words:
+                unique_words.append(x)
+        pointer_vocab = {}
+        for i, tok in enumerate(unique_words):
+            pointer_vocab[tok] = 35000 + i
+        return pointer_vocab
+
+    def get_orig_input_variable(self, list_of_words_in_seq_str, pointer_vocab):
+        orig_seq = []
+        for word in list_of_words_in_seq_str:
+            orig_seq.append(pointer_vocab[word])
+        return torch.tensor(orig_seq)
+
 
     def get_decoder_features(self, src_seq):
+        src_seq = src_seq.lower()
         src_id_seq = torch.LongTensor([self.src_vocab.stoi[tok] for tok in src_seq.lower().split(' ')]).view(1, -1)
         if torch.cuda.is_available():
             src_id_seq = src_id_seq.cuda()
 
+        list_of_pointer_vocab_for_source_sentence = [self.create_pointer_vocab(src_seq)]
+
+        list_orig_input_variables = [self.get_orig_input_variable(src_seq.lower().split(' '), list_of_pointer_vocab_for_source_sentence[-1])]
+
         with torch.no_grad():
-            softmax_list, _, other = self.model(src_id_seq, [len(src_seq)], testing=True)
+            softmax_list, _, other = self.model(src_id_seq, [len(src_seq)],
+                                                list_of_pointer_vocab_for_source_sentences=list_of_pointer_vocab_for_source_sentence,
+                                                list_orig_input_variables=list_orig_input_variables, testing=True)
 
         return other
 
