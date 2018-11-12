@@ -4,7 +4,7 @@ from torch.autograd import Variable
 
 class Predictor(object):
 
-    def __init__(self, model, src_vocab, tgt_vocab):
+    def __init__(self, model, src_vocab, tgt_vocab, pointer_vocab=None):
         """
         Predictor class to evaluate for a given model.
         Args:
@@ -12,22 +12,28 @@ class Predictor(object):
                 using `seq2seq.util.checkpoint.load`
             src_vocab (seq2seq.dataset.vocabulary.Vocabulary): source sequence vocabulary
             tgt_vocab (seq2seq.dataset.vocabulary.Vocabulary): target sequence vocabulary
+            pointer_vocab (seq2seq.dataset.vocabulary.Vocabulary): pointer vocab is a vocab for each source sentence
         """
         if torch.cuda.is_available():
             self.model = model.cuda()
         else:
             self.model = model.cpu()
         self.model.eval()
-        self.src_vocab = src_vocab
         self.tgt_vocab = tgt_vocab
+        self.src_vocab = src_vocab
+        self.ptr_vocab = pointer_vocab
+
+    def set_pointer_vocab(self, pointer_vocab):
+        self.ptr_vocab = pointer_vocab
+
 
     def get_decoder_features(self, src_seq):
-        src_id_seq = torch.LongTensor([self.src_vocab.stoi[tok] for tok in src_seq]).view(1, -1)
+        src_id_seq = torch.LongTensor([self.src_vocab.stoi[tok] for tok in src_seq.lower().split(' ')]).view(1, -1)
         if torch.cuda.is_available():
             src_id_seq = src_id_seq.cuda()
 
         with torch.no_grad():
-            softmax_list, _, other = self.model(src_id_seq, [len(src_seq)])
+            softmax_list, _, other = self.model(src_id_seq, [len(src_seq)], testing=True)
 
         return other
 
@@ -46,7 +52,15 @@ class Predictor(object):
         length = other['length'][0]
 
         tgt_id_seq = [other['sequence'][di][0].data[0] for di in range(length)]
-        tgt_seq = [self.tgt_vocab.itos[tok] for tok in tgt_id_seq]
+
+        tgt_seq = []
+
+        for tok in tgt_id_seq:
+            if tok > 34000:
+                tgt_seq.append(self.ptr_vocab(tok))
+            else:
+                tgt_seq.append(self.tgt_vocab.itos[tok])
+        # tgt_seq = [self.tgt_vocab.itos[tok] for tok in tgt_id_seq]
         return tgt_seq
 
     def predict_n(self, src_seq, n=1):

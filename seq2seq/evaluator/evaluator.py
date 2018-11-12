@@ -5,6 +5,7 @@ import torchtext
 
 import seq2seq
 from seq2seq.loss import NLLLoss
+import re
 
 class Evaluator(object):
     """ Class to evaluate models with given datasets.
@@ -17,6 +18,25 @@ class Evaluator(object):
     def __init__(self, loss=NLLLoss(), batch_size=64):
         self.loss = loss
         self.batch_size = batch_size
+
+    def create_pointer_vocab(self, seq_str):
+        seq = seq_str.strip()
+        seq = seq.replace("'", " ")
+        list_of_words_in_source_sentence = re.sub("[^\w]", " ", seq).split()
+        unique_words = []
+        for x in list_of_words_in_source_sentence:
+            if x not in unique_words:
+                unique_words.append(x)
+        pointer_vocab = {}
+        for i, tok in enumerate(unique_words):
+            pointer_vocab[tok] = 35000 + i
+        return pointer_vocab
+
+    def get_orig_input_variable(self, list_of_words_in_seq_str, pointer_vocab):
+        orig_seq = []
+        for word in list_of_words_in_seq_str:
+            orig_seq.append(pointer_vocab[word])
+        return torch.tensor(orig_seq)
 
     def evaluate(self, model, data):
         """ Evaluate a model on given dataset and return performance.
@@ -44,11 +64,26 @@ class Evaluator(object):
         pad = tgt_vocab.stoi[data.fields[seq2seq.tgt_field_name].pad_token]
 
         with torch.no_grad():
+            starting_index = 0
             for batch in batch_iterator:
                 input_variables, input_lengths  = getattr(batch, seq2seq.src_field_name)
                 target_variables = getattr(batch, seq2seq.tgt_field_name)
+                list_of_source_sentences = [' '.join(x.src) for x in
+                                            batch.dataset.examples[starting_index:starting_index + batch.batch_size]]
 
-                decoder_outputs, decoder_hidden, other = model(input_variables, input_lengths.tolist(), target_variables)
+                list_of_pointer_vocab_for_source_sentence = [self.create_pointer_vocab(x) for x in
+                                                             list_of_source_sentences]
+
+                list_orig_input_variables = [
+                    self.get_orig_input_variable(x.src, list_of_pointer_vocab_for_source_sentence[i]) for i, x in
+                    enumerate(batch.dataset.examples[starting_index:starting_index + batch.batch_size])]
+
+                starting_index = starting_index + batch.batch_size
+
+                decoder_outputs, decoder_hidden, other = model(input_variables, input_lengths.tolist(),
+                                                               target_variables,
+                                                               list_of_pointer_vocab_for_source_sentences=list_of_pointer_vocab_for_source_sentence,
+                                                               list_orig_input_variables=list_orig_input_variables)
 
                 # Evaluation
                 seqlist = other['sequence']

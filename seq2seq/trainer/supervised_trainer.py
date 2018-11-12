@@ -13,6 +13,7 @@ from seq2seq.evaluator import Evaluator
 from seq2seq.loss import NLLLoss
 from seq2seq.optim import Optimizer
 from seq2seq.util.checkpoint import Checkpoint
+import re
 
 class SupervisedTrainer(object):
     """ The SupervisedTrainer class helps in setting up a training framework in a
@@ -48,11 +49,12 @@ class SupervisedTrainer(object):
 
         self.logger = logging.getLogger(__name__)
 
-    def _train_batch(self, input_variable, input_lengths, target_variable, model, teacher_forcing_ratio):
+    def _train_batch(self, input_variable, input_lengths, target_variable, model, teacher_forcing_ratio, list_of_pointer_vocab_for_source_sentence, list_orig_input_variables):
         loss = self.loss
         # Forward propagation
         decoder_outputs, decoder_hidden, other = model(input_variable, input_lengths, target_variable,
-                                                       teacher_forcing_ratio=teacher_forcing_ratio)
+                                                       teacher_forcing_ratio=teacher_forcing_ratio,
+                                                       list_of_pointer_vocab_for_source_sentences=list_of_pointer_vocab_for_source_sentence, list_orig_input_variables=list_orig_input_variables)
         # Get loss
         loss.reset()
         for step, step_output in enumerate(decoder_outputs):
@@ -64,6 +66,24 @@ class SupervisedTrainer(object):
         self.optimizer.step()
 
         return loss.get_loss()
+
+    def create_pointer_vocab(self, seq_str):
+        seq = seq_str.strip()
+        list_of_words_in_source_sentence = re.sub("[^\w]", " ", seq).split()
+        unique_words = []
+        for x in list_of_words_in_source_sentence:
+            if x not in unique_words:
+                unique_words.append(x)
+        pointer_vocab = {}
+        for i, tok in enumerate(unique_words):
+            pointer_vocab[tok] = 35000 + i
+        return pointer_vocab
+
+    def get_orig_input_variable(self, list_of_words_in_seq_str, pointer_vocab):
+        orig_seq = []
+        for word in list_of_words_in_seq_str:
+            orig_seq.append(pointer_vocab[word])
+        return torch.tensor(orig_seq)
 
     def _train_epoches(self, data, model, n_epochs, start_epoch, start_step,
                        dev_data=None, teacher_forcing_ratio=0):
@@ -93,14 +113,24 @@ class SupervisedTrainer(object):
                 next(batch_generator)
 
             model.train(True)
+            starting_index = 0
             for batch in batch_generator:
                 step += 1
                 step_elapsed += 1
 
                 input_variables, input_lengths = getattr(batch, seq2seq.src_field_name)
                 target_variables = getattr(batch, seq2seq.tgt_field_name)
+                list_of_source_sentences = [' '.join(x.src) for x in
+                                            batch.dataset.examples[starting_index:starting_index + batch.batch_size]]
 
-                loss = self._train_batch(input_variables, input_lengths.tolist(), target_variables, model, teacher_forcing_ratio)
+                list_of_pointer_vocab_for_source_sentence = [self.create_pointer_vocab(x) for x in list_of_source_sentences]
+
+                list_orig_input_variables = [self.get_orig_input_variable(x.src,list_of_pointer_vocab_for_source_sentence[i]) for i, x in
+                                            enumerate(batch.dataset.examples[starting_index:starting_index + batch.batch_size])]
+
+                starting_index = starting_index + batch.batch_size
+
+                loss = self._train_batch(input_variables, input_lengths.tolist(), target_variables, model, teacher_forcing_ratio, list_of_pointer_vocab_for_source_sentence, list_orig_input_variables)
 
                 # Record average loss
                 print_loss_total += loss

@@ -14,6 +14,7 @@ from seq2seq.optim import Optimizer
 from seq2seq.dataset import SourceField, TargetField
 from seq2seq.evaluator import Predictor
 from seq2seq.util.checkpoint import Checkpoint
+import re
 
 try:
     raw_input  # Python 2
@@ -83,7 +84,7 @@ else:
     src = SourceField()
     tgt = TargetField()
     max_len = 50
-    layers = 10
+    layers = 1
 
     print('Program started at ' + str(datetime.datetime.now()))
 
@@ -106,10 +107,14 @@ else:
     print('Total dev samples are  ' + str(len(dev.examples)))
     print('Dev data done processing at  ' + str(datetime.datetime.now()))
 
-    src.build_vocab(train, max_size=30000)
-    tgt.build_vocab(train, max_size=30000, include_source_vocab=True)
+    shared_vocab = True
+
+    src.build_vocab(train, max_size=10000, shared_vocab=shared_vocab)
+    tgt.build_vocab(train, max_size=10000, shared_vocab=shared_vocab)
     input_vocab = src.vocab
     output_vocab = tgt.vocab
+
+    assert input_vocab == output_vocab
 
     #stoi = source word to index
     #itos = index to source
@@ -140,9 +145,9 @@ else:
         #                      eos_id=tgt.eos_id, sos_id=tgt.sos_id)
         encoder = EncoderRNN(len(tgt.vocab), max_len, hidden_size, n_layers=layers,
                              bidirectional=True, variable_lengths=True)
-        decoder = DecoderRNN(len(tgt.vocab), max_len, hidden_size,
-                             dropout_p=0.2, n_layers=layers, attention='global', bidirectional=False,
-                             eos_id=tgt.eos_id, sos_id=tgt.sos_id)
+        decoder = DecoderRNN(len(tgt.vocab), max_len, hidden_size * 2,
+                             dropout_p=0.2, n_layers=layers, attention='global', bidirectional=True,
+                             eos_id=tgt.eos_id, sos_id=tgt.sos_id, source_vocab_size=len(input_vocab), copy_mechanism=True)
 
         seq2seq = Seq2seq(encoder, decoder)
         if torch.cuda.is_available():
@@ -162,11 +167,11 @@ else:
     print('Initailization of seq2seq is done ' + str(datetime.datetime.now()))
     t = SupervisedTrainer(loss=loss, batch_size=1,
                           checkpoint_every=50,
-                          print_every=10, expt_dir=opt.expt_dir)
+                          print_every=1, expt_dir=opt.expt_dir)
     print('Initailization of supervisor trainer is done ' + str(datetime.datetime.now()))
 
     seq2seq = t.train(seq2seq, train,
-                      num_epochs=2, dev_data=dev,
+                      num_epochs=1, dev_data=dev,
                       optimizer=optimizer,
                       teacher_forcing_ratio=1.0,
                       resume=opt.resume)
@@ -176,7 +181,21 @@ beam_search = Seq2seq(seq2seq.encoder, TopKDecoder(seq2seq.decoder, 5))
 predictor_beam = Predictor(beam_search, input_vocab, output_vocab)
 # predictor = Predictor(seq2seq, input_vocab, output_vocab)
 
+def create_pointer_vocab(seq_str):
+    seq = seq_str.strip()
+    seq = seq.replace("'", " ")
+    list_of_words_in_source_sentence = re.sub("[^\w]", " ", seq).split()
+    unique_words = []
+    for x in list_of_words_in_source_sentence:
+        if x not in unique_words:
+            unique_words.append(x)
+    pointer_vocab = {}
+    for i, tok in enumerate(unique_words):
+        pointer_vocab[tok] = 35000 + i
+    return pointer_vocab, seq
+
 while True:
     seq_str = raw_input("Type in a source sequence:")
-    seq = seq_str.strip().split()
-    print(predictor_beam.predict(seq))
+    pointer_vocab, seq_str = create_pointer_vocab(seq_str)
+    predictor_beam.set_pointer_vocab(pointer_vocab)
+    print(predictor_beam.predict(seq_str))

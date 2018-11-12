@@ -8,6 +8,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 
 from .attention import Attention, PointerAttention
+from .switching_network import SwitchingNetworkModel
 from .baseRNN import BaseRNN
 
 if torch.cuda.is_available():
@@ -66,12 +67,12 @@ class DecoderRNN(BaseRNN):
     KEY_SEQUENCE = 'sequence'
 
     def __init__(self, vocab_size, max_len, hidden_size,
-            sos_id, eos_id,
-            n_layers=1, rnn_cell='gru', bidirectional=False,
-            input_dropout_p=0, dropout_p=0, attention=None):
+                 sos_id, eos_id,
+                 n_layers=1, rnn_cell='gru', bidirectional=False,
+                 input_dropout_p=0, dropout_p=0, attention=None, source_vocab_size=0, copy_mechanism=True):
         super(DecoderRNN, self).__init__(vocab_size, max_len, hidden_size,
-                input_dropout_p, dropout_p,
-                n_layers, rnn_cell)
+                                         input_dropout_p, dropout_p,
+                                         n_layers, rnn_cell)
 
         self.bidirectional_encoder = bidirectional
         self.rnn = self.rnn_cell(hidden_size, hidden_size, n_layers, batch_first=True, dropout=dropout_p)
@@ -81,7 +82,9 @@ class DecoderRNN(BaseRNN):
         self.attention = attention
         self.eos_id = eos_id
         self.sos_id = sos_id
+        self.n_layers = n_layers
         self.attention_type = attention
+        self.source_vocab_output_size = source_vocab_size
 
         self.init_input = None
 
@@ -89,20 +92,21 @@ class DecoderRNN(BaseRNN):
         if attention == 'global':
             self.attention = Attention(self.hidden_size)
             self.out = nn.Linear(self.hidden_size, self.output_size)
-        elif attention == 'pointer':
-            self.attention = PointerAttention(self.hidden_size)
-            self.out = lambda x: x
+        if copy_mechanism:
+            self.switching_network_model = SwitchingNetworkModel(self.hidden_size)
+            # self.pointer_attention = PointerAttention(self.hidden_size)
         elif attention is None:
             self.attention = None
             self.out = nn.Linear(self.hidden_size, self.output_size)
         else:
             raise ValueError("Attention type: %s is not supported." % attention)
 
-    def forward_step(self, input_var, hidden, encoder_outputs, function):
-        # Input_var(batch_size*output_size*bidirectional)
-        #input_var is original output. we need to check its output size that's why we need it here.
-        # encoder_outputs(batch_size*layers_in_encoders*bidirectional)
-        # hidden(layer*layers_in_encoders*bidirectional)
+    def forward_step(self, input_var, hidden, encoder_outputs, function, list_of_pointer_vocab_for_source_sentences,
+                     testing=False, use_teacher_forcing = False):
+        # Input_var(batch_size*output_size*bidirectional)(Original output from decoder.)
+        # input_var is original output. we need to check its output size that's why we need it here.
+        # encoder_outputs(batch_size*layers_in_encoders*bidirectional)(Context Vector).
+        # hidden(layer*layers_in_encoders*bidirectional) (output from the Encoder)
         batch_size = input_var.size(0)
         output_size = input_var.size(1)
         # embedded = (batchsize*outputsize)
@@ -114,15 +118,46 @@ class DecoderRNN(BaseRNN):
 
         attn = None
         if self.attention is not None:
-            output, attn = self.attention(output, encoder_outputs)
+            updated_output, attn = self.attention(output, encoder_outputs)
 
-        # Here we are doing this to find the probability of all the words which exist in target vocab. Function is F.log_softmax
-        predicted_softmax = function(self.out(output.contiguous().view(-1, self.hidden_size)), dim=1).view(batch_size, output_size, -1)
 
-        return predicted_softmax, hidden, attn
+        if not testing and use_teacher_forcing:
+            if int(input_var) == 0:
+                self.switching_network_model.train_model(encoder_outputs, hidden, torch.FloatTensor([0]))
+            else:
+                self.switching_network_model.train_model(encoder_outputs, hidden, torch.FloatTensor([1]))
+        else:
+            prob_of_z_t_1 = self.switching_network_model(encoder_outputs, hidden)
+            prob_of_z_t_1 = float(prob_of_z_t_1)
+
+        # Takes probability of pointer vocab keywords for copy mechanism and to copy word form source sentence
+        self.pointer_vocab_prob = nn.Linear(self.hidden_size, len(list_of_pointer_vocab_for_source_sentences[0]))
+        pointer_vocab_predicted_softmax = function(
+            self.pointer_vocab_prob(output.contiguous().view(-1, self.hidden_size)),
+            dim=1).view(batch_size,
+                        output_size,
+                        -1)
+
+        # Here we are doing this to find the probability of all the words in comman vocab. Function is F.log_softmax
+        common_vocab_predicted_softmax = function(self.out(updated_output.contiguous().view(-1, self.hidden_size)),
+                                                  dim=1).view(batch_size, output_size, -1)
+
+        if testing:
+            prob_shortlist_vocab = (prob_of_z_t_1 * common_vocab_predicted_softmax).topk(1)[0]
+            prob_location_vocab = ((1 - prob_of_z_t_1) * pointer_vocab_predicted_softmax).topk(1)[0]
+            if prob_location_vocab > prob_shortlist_vocab:
+                return pointer_vocab_predicted_softmax, hidden, attn
+
+        return common_vocab_predicted_softmax, hidden, attn
 
     def forward(self, inputs=None, encoder_hidden=None, encoder_outputs=None,
-                    function=F.log_softmax, teacher_forcing_ratio=0, encoder_input=None):
+                function=F.log_softmax, teacher_forcing_ratio=0, encoder_inputs=None,
+                list_of_pointer_vocab_for_source_sentences=None, testing=False):
+
+        # Here encoder_inputs is a list of original input to encode which is a vector of indices from pointer vocab of each sentence.
+        # list_of_pointer_vocab_for_source_sentences is the list of source pointer vocab
+        # encoder_outputs is last output from
+
         ret_dict = dict()
         if self.attention is not None:
             if encoder_outputs is None:
@@ -132,6 +167,7 @@ class DecoderRNN(BaseRNN):
         inputs, batch_size, max_length = self._validate_args(inputs, encoder_hidden, encoder_outputs,
                                                              function, teacher_forcing_ratio)
         decoder_hidden = self._init_state(encoder_hidden)
+        encoder_hidden_or_context_vector = decoder_hidden
 
         use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
 
@@ -141,20 +177,34 @@ class DecoderRNN(BaseRNN):
 
         def decode(step, step_output, step_attn):
             # For fetching the index of word from encoder input which needs to be copy over.
-            if self.attention_type == 'pointer':
-                val, ind = torch.max(step_attn, 1)
-                copy_index = int(ind)
+            # if self.attention_type == 'pointer':
+            #     val, ind = torch.max(step_attn, 2)
+            #     copy_index = int(ind)
 
             decoder_outputs.append(step_output)
 
             if self.attention is not None:
                 ret_dict[DecoderRNN.KEY_ATTN_SCORE].append(step_attn)
-            #For copy same word from the encoder.
-            if self.attention_type == 'pointer':
-                symbols = int(encoder_input[:, copy_index])
+            # For copy same word from the encoder.
+            # if self.attention_type == 'pointer':
+            #     symbols = encoder_inputs[:, copy_index]
+            # else:
+            #     symbols = decoder_outputs[-1].topk(1)[1]
+            if testing:
+                if not decoder_outputs[-1].size()[1] > len(list_of_pointer_vocab_for_source_sentences[-1]):
+                    location_of_word = decoder_outputs[-1].topk(1)[1]
+                    index_from_pointer_vocab = list(list_of_pointer_vocab_for_source_sentences[0].items())[location_of_word][1]
+                    symbols = torch.LongTensor([index_from_pointer_vocab]).unsqueeze(1)
+                else:
+                    symbols = decoder_outputs[-1].topk(1)[1]
             else:
                 symbols = decoder_outputs[-1].topk(1)[1]
+
             sequence_symbols.append(symbols)
+
+            if not testing and int(symbols) >33000 :
+                #convert it back to unknown with 0 tensor for next input.
+                symbols = torch.LongTensor([0]).unsqueeze(1)
 
             eos_batches = symbols.data.eq(self.eos_id)
             if eos_batches.dim() > 0:
@@ -166,13 +216,15 @@ class DecoderRNN(BaseRNN):
         # Manual unrolling is used to support random teacher forcing.
         # If teacher_forcing_ratio is True or False instead of a probability, the unrolling can be done in graph
 
-        # TODO use this new logic for teacher_forcing and training (confirm with Iulian)
         if use_teacher_forcing:
             for di in range(max_length):
                 # inputs are original output of decoder
                 decoder_input = inputs[:, di].unsqueeze(1)
-                decoder_output, decoder_hidden, step_attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs,
-                                                                         function=function)
+                decoder_output, decoder_hidden, step_attn = self.forward_step(decoder_input, decoder_hidden,
+                                                                              encoder_outputs,
+                                                                              function=function,
+                                                                              list_of_pointer_vocab_for_source_sentences=list_of_pointer_vocab_for_source_sentences,
+                                                                              testing=testing,use_teacher_forcing = use_teacher_forcing)
                 step_output = decoder_output.squeeze(1)
                 # final symbol predicted from decoder output
                 symbols = decode(di, step_output, step_attn)
@@ -180,8 +232,11 @@ class DecoderRNN(BaseRNN):
             # inputs are original output of decoder
             decoder_input = inputs[:, 0].unsqueeze(1)
             for di in range(max_length):
-                decoder_output, decoder_hidden, step_attn = self.forward_step(decoder_input, decoder_hidden, encoder_outputs,
-                                                                         function=function)
+                decoder_output, decoder_hidden, step_attn = self.forward_step(decoder_input, decoder_hidden,
+                                                                              encoder_outputs,
+                                                                              function=function,
+                                                                              list_of_pointer_vocab_for_source_sentences=list_of_pointer_vocab_for_source_sentences,
+                                                                              testing=testing,use_teacher_forcing = use_teacher_forcing)
                 step_output = decoder_output.squeeze(1)
                 symbols = decode(di, step_output, step_attn)
                 decoder_input = symbols
@@ -266,6 +321,6 @@ class DecoderRNN(BaseRNN):
                 inputs = inputs.cuda()
             max_length = self.max_length
         else:
-            max_length = inputs.size(1) - 1 # minus the start of sequence symbol
+            max_length = inputs.size(1) - 1  # minus the start of sequence symbol
 
         return inputs, batch_size, max_length
