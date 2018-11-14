@@ -69,7 +69,7 @@ class DecoderRNN(BaseRNN):
     def __init__(self, vocab_size, max_len, hidden_size,
                  sos_id, eos_id,
                  n_layers=1, rnn_cell='gru', bidirectional=False,
-                 input_dropout_p=0, dropout_p=0, attention=None, source_vocab_size=0, copy_mechanism=True):
+                 input_dropout_p=0, dropout_p=0, use_attention=False, source_vocab_size=0, copy_mechanism=True):
         super(DecoderRNN, self).__init__(vocab_size, max_len, hidden_size,
                                          input_dropout_p, dropout_p,
                                          n_layers, rnn_cell)
@@ -79,27 +79,22 @@ class DecoderRNN(BaseRNN):
 
         self.output_size = vocab_size
         self.max_length = max_len
-        self.attention = attention
         self.eos_id = eos_id
         self.sos_id = sos_id
         self.n_layers = n_layers
-        self.attention_type = attention
         self.source_vocab_output_size = source_vocab_size
 
         self.init_input = None
 
         self.embedding = nn.Embedding(self.output_size, self.hidden_size)
-        if attention == 'global':
+        if use_attention:
             self.attention = Attention(self.hidden_size)
+            self.out = nn.Linear(self.hidden_size, self.output_size)
+        else:
+            self.attention = None
             self.out = nn.Linear(self.hidden_size, self.output_size)
         if copy_mechanism:
             self.switching_network_model = SwitchingNetworkModel(self.hidden_size)
-            # self.pointer_attention = PointerAttention(self.hidden_size)
-        elif attention is None:
-            self.attention = None
-            self.out = nn.Linear(self.hidden_size, self.output_size)
-        else:
-            raise ValueError("Attention type: %s is not supported." % attention)
 
     def forward_step(self, input_var, hidden, encoder_outputs, function, list_of_pointer_vocab_for_source_sentences,
                      testing=False, use_teacher_forcing = False):
@@ -255,6 +250,8 @@ class DecoderRNN(BaseRNN):
                                                                               testing=testing,use_teacher_forcing = use_teacher_forcing)
                 step_output = decoder_output.squeeze(1)
                 symbols = decode(di, step_output, step_attn)
+                if testing and int(symbols) > 34000:
+                    symbols = torch.LongTensor([0]).unsqueeze(0)
                 decoder_input = symbols
 
         ret_dict[DecoderRNN.KEY_SEQUENCE] = sequence_symbols

@@ -57,11 +57,15 @@ class Predictor(object):
         list_orig_input_variables = [self.get_orig_input_variable(src_seq.lower().split(' '), list_of_pointer_vocab_for_source_sentence[-1])]
 
         with torch.no_grad():
-            softmax_list, _, other = self.model(src_id_seq, [len(src_seq)],
+            softmax_list, _, other = self.model(src_id_seq, [len(src_seq.split(' '))],
                                                 list_of_pointer_vocab_for_source_sentences=list_of_pointer_vocab_for_source_sentence,
                                                 list_orig_input_variables=list_orig_input_variables, testing=True)
 
         return other
+
+    def return_word(self, tok):
+        word =[key for key, val in self.ptr_vocab.items() if val==tok]
+        return word[0]
 
     def predict(self, src_seq):
         """ Make prediction given `src_seq` as input.
@@ -82,10 +86,10 @@ class Predictor(object):
         tgt_seq = []
 
         for tok in tgt_id_seq:
-            if tok > 34000:
-                tgt_seq.append(self.ptr_vocab(tok))
+            if int(tok) > 34000:
+                tgt_seq.append(self.return_word(int(tok)))
             else:
-                tgt_seq.append(self.tgt_vocab.itos[tok])
+                tgt_seq.append(self.tgt_vocab.itos[int(tok)])
         # tgt_seq = [self.tgt_vocab.itos[tok] for tok in tgt_id_seq]
         return tgt_seq
 
