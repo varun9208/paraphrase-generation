@@ -86,6 +86,7 @@ else:
     tgt = TargetField()
     max_len = 50
     layers = 1
+    copy_mechanism = False
 
     print('Program started at ' + str(datetime.datetime.now()))
 
@@ -150,7 +151,7 @@ else:
         decoder = DecoderRNN(len(tgt.vocab), max_len, hidden_size * 2,
                              dropout_p=0.2, n_layers=layers, use_attention=True, bidirectional=True,
                              eos_id=tgt.eos_id, sos_id=tgt.sos_id, source_vocab_size=len(input_vocab),
-                             copy_mechanism=True)
+                             copy_mechanism=copy_mechanism)
 
         seq2seq = Seq2seq(encoder, decoder)
         if torch.cuda.is_available():
@@ -182,7 +183,7 @@ else:
 
 # beam_search = Seq2seq(seq2seq.encoder, TopKDecoder(seq2seq.decoder, 5))
 # predictor_beam = Predictor(beam_search, input_vocab, output_vocab)
-predictor_beam = Predictor(seq2seq, input_vocab, output_vocab)
+predictor_beam = Predictor(seq2seq, input_vocab, output_vocab, copy_mechanism)
 
 
 def create_pointer_vocab(seq_str):
@@ -200,7 +201,9 @@ def create_pointer_vocab(seq_str):
 
 
 while True:
+    copy_mechanism = False
     seq_str = raw_input("Type in a source sequence:")
-    pointer_vocab, seq_str = create_pointer_vocab(seq_str)
-    predictor_beam.set_pointer_vocab(pointer_vocab)
+    if copy_mechanism:
+        pointer_vocab, seq_str = create_pointer_vocab(seq_str)
+        predictor_beam.set_pointer_vocab(pointer_vocab)
     print(predictor_beam.predict(seq_str))

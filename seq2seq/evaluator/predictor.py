@@ -5,7 +5,7 @@ import re
 
 class Predictor(object):
 
-    def __init__(self, model, src_vocab, tgt_vocab, pointer_vocab=None):
+    def __init__(self, model, src_vocab, tgt_vocab, pointer_vocab=None, copy_mechanism=False):
         """
         Predictor class to evaluate for a given model.
         Args:
@@ -23,6 +23,7 @@ class Predictor(object):
         self.tgt_vocab = tgt_vocab
         self.src_vocab = src_vocab
         self.ptr_vocab = pointer_vocab
+        self.copy_mechanism = copy_mechanism
 
     def set_pointer_vocab(self, pointer_vocab):
         self.ptr_vocab = pointer_vocab
@@ -86,7 +87,7 @@ class Predictor(object):
         tgt_seq = []
 
         for tok in tgt_id_seq:
-            if int(tok) > 34000:
+            if self.copy_mechanism and int(tok) > 34000:
                 tgt_seq.append(self.return_word(int(tok)))
             else:
                 tgt_seq.append(self.tgt_vocab.itos[int(tok)])
@@ -111,7 +112,12 @@ class Predictor(object):
         for x in range(0, int(n)):
             length = other['topk_length'][0][x]
             tgt_id_seq = [other['topk_sequence'][di][0, x, 0].data[0] for di in range(length)]
-            tgt_seq = [self.tgt_vocab.itos[tok] for tok in tgt_id_seq]
+            tgt_seq = []
+            for tok in tgt_id_seq:
+                if self.copy_mechanism and int(tok) > 34000:
+                    tgt_seq.append(self.return_word(int(tok)))
+                else:
+                    tgt_seq.append(self.tgt_vocab.itos[int(tok)])
+            # tgt_seq = [self.tgt_vocab.itos[tok] for tok in tgt_id_seq]
             result.append(tgt_seq)
-
         return result
