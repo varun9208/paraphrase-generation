@@ -28,7 +28,7 @@ class SupervisedTrainer(object):
     """
     def __init__(self, expt_dir='experiment', loss=NLLLoss(), batch_size=64,
                  random_seed=None,
-                 checkpoint_every=100, print_every=100):
+                 checkpoint_every=100, print_every=100,copy_mechanism=False):
         self._trainer = "Simple Trainer"
         self.random_seed = random_seed
         if random_seed is not None:
@@ -39,6 +39,7 @@ class SupervisedTrainer(object):
         self.optimizer = None
         self.checkpoint_every = checkpoint_every
         self.print_every = print_every
+        self.copy_mechanism = copy_mechanism
 
         if not os.path.isabs(expt_dir):
             expt_dir = os.path.join(os.getcwd(), expt_dir)
@@ -120,17 +121,23 @@ class SupervisedTrainer(object):
 
                 input_variables, input_lengths = getattr(batch, seq2seq.src_field_name)
                 target_variables = getattr(batch, seq2seq.tgt_field_name)
-                list_of_source_sentences = [' '.join(x.src) for x in
-                                            batch.dataset.examples[starting_index:starting_index + batch.batch_size]]
 
-                list_of_pointer_vocab_for_source_sentence = [self.create_pointer_vocab(x) for x in list_of_source_sentences]
+                if self.copy_mechanism:
+                    list_of_source_sentences = [' '.join(x.src) for x in
+                                                batch.dataset.examples[starting_index:starting_index + batch.batch_size]]
 
-                list_orig_input_variables = [self.get_orig_input_variable(x.src,list_of_pointer_vocab_for_source_sentence[i]) for i, x in
-                                            enumerate(batch.dataset.examples[starting_index:starting_index + batch.batch_size])]
+                    list_of_pointer_vocab_for_source_sentence = [self.create_pointer_vocab(x) for x in list_of_source_sentences]
 
-                starting_index = starting_index + batch.batch_size
+                    list_orig_input_variables = [self.get_orig_input_variable(x.src,list_of_pointer_vocab_for_source_sentence[i]) for i, x in
+                                                enumerate(batch.dataset.examples[starting_index:starting_index + batch.batch_size])]
 
-                loss = self._train_batch(input_variables, input_lengths.tolist(), target_variables, model, teacher_forcing_ratio, list_of_pointer_vocab_for_source_sentence, list_orig_input_variables)
+                    starting_index = starting_index + batch.batch_size
+
+                    loss = self._train_batch(input_variables, input_lengths.tolist(), target_variables, model, teacher_forcing_ratio, list_of_pointer_vocab_for_source_sentence, list_orig_input_variables)
+                else:
+                    loss = self._train_batch(input_variables, input_lengths.tolist(), target_variables, model,
+                                             teacher_forcing_ratio, [],
+                                             [])
 
                 # Record average loss
                 print_loss_total += loss

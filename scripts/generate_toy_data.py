@@ -7,10 +7,10 @@ from collections import Counter
 
 parser = argparse.ArgumentParser()
 # parser.add_argument('--dir', help="data directory", default="../data")
-parser.add_argument('--dir', help="data directory", default="../ppdb_data")
+parser.add_argument('--dir', help="data directory", default="../ppdb_data_M")
 parser.add_argument('--max-len', help="max sequence length", default=20)
 # parser.add_argument('--data_path', help="paraphrase data path", default='../paraphrase_data/PIT_2015_SYSTEM.csv')
-parser.add_argument('--data_path', help="paraphrase data path", default='../paraphrase_data/PPDB_XL_CSV_DATASET.csv')
+parser.add_argument('--data_path', help="paraphrase data path", default='../paraphrase_data/PPDB_M_CSV_DATASET.csv')
 args = parser.parse_args()
 
 
@@ -43,7 +43,7 @@ def generate_dataset_translation(root):
     print('Sentences Generated')
 
     sentence_1_train, sentence_1_test, sentence_2_train, sentence_2_test = train_test_split(sentence_1, sentence_2,
-                                                                                            test_size=0.30,
+                                                                                            test_size=0.20,
                                                                                             random_state=42)
 
     print('Train and test data generated')
@@ -135,7 +135,7 @@ if __name__ == '__main__':
         os.mkdir(data_dir)
 
     # toy_dir = os.path.join(data_dir, 'paraphrase_dataset')
-    toy_dir = os.path.join(data_dir, 'ppdb_paraphrase_xl_dataset')
+    toy_dir = os.path.join(data_dir, 'ppdb_paraphrase_m_dataset')
     if not os.path.exists(toy_dir):
         os.mkdir(toy_dir)
 

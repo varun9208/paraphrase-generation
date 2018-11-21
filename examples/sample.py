@@ -44,6 +44,9 @@ parser.add_argument('--resume', action='store_true', dest='resume',
 parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
+parser.add_argument('--copy_mechanism', action='store_true', dest='copy_mechanism',
+                    default=False,
+                    help='Indicates whether to use copy mechanism or not')
 
 opt = parser.parse_args()
 spacy_en = spacy.load('en')
@@ -86,7 +89,7 @@ else:
     tgt = TargetField()
     max_len = 50
     layers = 1
-    copy_mechanism = False
+    copy_mechanism = opt.copy_mechanism
 
     print('Program started at ' + str(datetime.datetime.now()))
 
@@ -111,8 +114,8 @@ else:
 
     shared_vocab = True
 
-    src.build_vocab(train, max_size=10000, shared_vocab=shared_vocab)
-    tgt.build_vocab(train, max_size=10000, shared_vocab=shared_vocab)
+    src.build_vocab(train, max_size=30000, shared_vocab=shared_vocab)
+    tgt.build_vocab(train, max_size=30000, shared_vocab=shared_vocab)
     input_vocab = src.vocab
     output_vocab = tgt.vocab
 
@@ -140,7 +143,8 @@ else:
     optimizer = None
     if not opt.resume:
         # Initialize model
-        hidden_size = 512
+        # [128,512,1024]
+        hidden_size = 128
         # encoder = EncoderRNN(len(src.vocab), max_len, hidden_size, n_layers=layers,
         #                      bidirectional=True, variable_lengths=True)
         # decoder = DecoderRNN(len(tgt.vocab), max_len, hidden_size * 2 if bidirectional else hidden_size,
@@ -148,6 +152,7 @@ else:
         #                      eos_id=tgt.eos_id, sos_id=tgt.sos_id)
         encoder = EncoderRNN(len(tgt.vocab), max_len, hidden_size, n_layers=layers,
                              bidirectional=True, variable_lengths=True)
+        print('Copy mechanism is '+ str(copy_mechanism) + 'in decoder')
         decoder = DecoderRNN(len(tgt.vocab), max_len, hidden_size * 2,
                              dropout_p=0.2, n_layers=layers, use_attention=True, bidirectional=True,
                              eos_id=tgt.eos_id, sos_id=tgt.sos_id, source_vocab_size=len(input_vocab),
@@ -171,11 +176,11 @@ else:
     print('Initailization of seq2seq is done ' + str(datetime.datetime.now()))
     t = SupervisedTrainer(loss=loss, batch_size=100,
                           checkpoint_every=50,
-                          print_every=1, expt_dir=opt.expt_dir)
+                          print_every=100, expt_dir=opt.expt_dir,copy_mechanism=copy_mechanism)
     print('Initailization of supervisor trainer is done ' + str(datetime.datetime.now()))
 
     seq2seq = t.train(seq2seq, train,
-                      num_epochs=1, dev_data=dev,
+                      num_epochs=100, dev_data=dev,
                       optimizer=optimizer,
                       teacher_forcing_ratio=1.0,
                       resume=opt.resume)
@@ -183,6 +188,7 @@ else:
 
 # beam_search = Seq2seq(seq2seq.encoder, TopKDecoder(seq2seq.decoder, 5))
 # predictor_beam = Predictor(beam_search, input_vocab, output_vocab)
+print('Copy mechanism is ' + str(copy_mechanism) + 'in predictor')
 predictor_beam = Predictor(seq2seq, input_vocab, output_vocab, copy_mechanism)
 
 
@@ -202,6 +208,7 @@ def create_pointer_vocab(seq_str):
 
 while True:
     copy_mechanism = False
+    print('Copy mechanism is ' + str(copy_mechanism) + 'in predictor in testing')
     seq_str = raw_input("Type in a source sequence:")
     if copy_mechanism:
         pointer_vocab, seq_str = create_pointer_vocab(seq_str)
