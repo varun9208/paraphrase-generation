@@ -174,13 +174,13 @@ else:
 
     # train
     print('Initailization of seq2seq is done ' + str(datetime.datetime.now()))
-    t = SupervisedTrainer(loss=loss, batch_size=100,
-                          checkpoint_every=50,
+    t = SupervisedTrainer(loss=loss, batch_size=250,
+                          checkpoint_every=1000,
                           print_every=100, expt_dir=opt.expt_dir,copy_mechanism=copy_mechanism)
     print('Initailization of supervisor trainer is done ' + str(datetime.datetime.now()))
 
     seq2seq = t.train(seq2seq, train,
-                      num_epochs=100, dev_data=dev,
+                      num_epochs=1, dev_data=dev,
                       optimizer=optimizer,
                       teacher_forcing_ratio=1.0,
                       resume=opt.resume)
