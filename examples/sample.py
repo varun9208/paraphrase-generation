@@ -38,6 +38,8 @@ parser.add_argument('--expt_dir', action='store', dest='expt_dir', default='./ex
                     help='Path to experiment directory. If load_checkpoint is True, then path to checkpoint directory has to be provided')
 parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint',
                     help='The name of the checkpoint to load, usually an encoded time string')
+parser.add_argument('--load_checkpoint_and_resume_training', action='store', dest='load_checkpoint_and_resume_training',
+                    help='The name of the checkpoint to load, usually an encoded time string', default='2018_11_21_20_31_43')
 parser.add_argument('--resume', action='store_true', dest='resume',
                     default=False,
                     help='Indicates if training has to be resumed from the latest checkpoint')
@@ -64,6 +66,7 @@ if opt.load_checkpoint is not None:
     seq2seq = checkpoint.model
     input_vocab = checkpoint.input_vocab
     output_vocab = checkpoint.output_vocab
+
 else:
     def tokenizer(text):  # create a tokenizer function
         return [tok.text for tok in spacy_en.tokenizer(text)]
@@ -183,13 +186,13 @@ else:
                       num_epochs=1, dev_data=dev,
                       optimizer=optimizer,
                       teacher_forcing_ratio=1.0,
-                      resume=opt.resume)
+                      resume=opt.resume, resume_model_name=opt.load_checkpoint_and_resume_training)
     print('Training of seq2seq is done ' + str(datetime.datetime.now()))
 
 # beam_search = Seq2seq(seq2seq.encoder, TopKDecoder(seq2seq.decoder, 5))
 # predictor_beam = Predictor(beam_search, input_vocab, output_vocab)
-print('Copy mechanism is ' + str(copy_mechanism) + 'in predictor')
-predictor_beam = Predictor(seq2seq, input_vocab, output_vocab, copy_mechanism)
+print('Copy mechanism is ' + str(opt.copy_mechanism) + 'in predictor')
+predictor_beam = Predictor(seq2seq, input_vocab, output_vocab, opt.copy_mechanism)
 
 
 def create_pointer_vocab(seq_str):

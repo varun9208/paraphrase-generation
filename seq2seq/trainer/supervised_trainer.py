@@ -177,7 +177,7 @@ class SupervisedTrainer(object):
 
     def train(self, model, data, num_epochs=5,
               resume=False, dev_data=None,
-              optimizer=None, teacher_forcing_ratio=0):
+              optimizer=None, teacher_forcing_ratio=0, resume_model_name=''):
         """ Run training for a given model.
 
         Args:
@@ -196,6 +196,10 @@ class SupervisedTrainer(object):
         # If training is set to resume
         if resume:
             latest_checkpoint_path = Checkpoint.get_latest_checkpoint(self.expt_dir)
+            if not resume_model_name is None or not resume_model_name == '':
+                list_of_path=latest_checkpoint_path.split('/')
+                list_of_path[-1] = resume_model_name
+                latest_checkpoint_path = '/'.join(list_of_path)
             resume_checkpoint = Checkpoint.load(latest_checkpoint_path)
             model = resume_checkpoint.model
             self.optimizer = resume_checkpoint.optimizer

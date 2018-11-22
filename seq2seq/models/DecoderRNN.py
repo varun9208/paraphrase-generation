@@ -224,6 +224,8 @@ class DecoderRNN(BaseRNN):
                             # convert it back to unknown with 0 tensor for next input.
                             symbols[x] = torch.LongTensor([0]).unsqueeze(1)
                     sequence_symbols.append(symbols)
+            else:
+                sequence_symbols.append(symbols)
 
             eos_batches = symbols.data.eq(self.eos_id)
             if eos_batches.dim() > 0:
