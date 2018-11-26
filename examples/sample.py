@@ -37,9 +37,9 @@ parser.add_argument('--dev_path', action='store', dest='dev_path',
 parser.add_argument('--expt_dir', action='store', dest='expt_dir', default='./experiment',
                     help='Path to experiment directory. If load_checkpoint is True, then path to checkpoint directory has to be provided')
 parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint',
-                    help='The name of the checkpoint to load, usually an encoded time string')
+                    help='The name of the checkpoint to load, usually an encoded time string and directly goes to prediction step')
 parser.add_argument('--load_checkpoint_and_resume_training', action='store', dest='load_checkpoint_and_resume_training',
-                    help='The name of the checkpoint to load, usually an encoded time string', default='2018_11_21_20_31_43')
+                    help='The name of the checkpoint to load, usually an encoded time string', default='2018_11_23_16_13_49')
 parser.add_argument('--resume', action='store_true', dest='resume',
                     default=False,
                     help='Indicates if training has to be resumed from the latest checkpoint')
@@ -49,6 +49,9 @@ parser.add_argument('--log-level', dest='log_level',
 parser.add_argument('--copy_mechanism', action='store_true', dest='copy_mechanism',
                     default=False,
                     help='Indicates whether to use copy mechanism or not')
+parser.add_argument('--eval', action='store_true', dest='eval',
+                    default=False,
+                    help='Indicates whether We just need to evaluate model on dev data')
 
 opt = parser.parse_args()
 spacy_en = spacy.load('en')
@@ -147,7 +150,7 @@ else:
     if not opt.resume:
         # Initialize model
         # [128,512,1024]
-        hidden_size = 128
+        hidden_size = 256
         # encoder = EncoderRNN(len(src.vocab), max_len, hidden_size, n_layers=layers,
         #                      bidirectional=True, variable_lengths=True)
         # decoder = DecoderRNN(len(tgt.vocab), max_len, hidden_size * 2 if bidirectional else hidden_size,
@@ -186,7 +189,7 @@ else:
                       num_epochs=1, dev_data=dev,
                       optimizer=optimizer,
                       teacher_forcing_ratio=1.0,
-                      resume=opt.resume, resume_model_name=opt.load_checkpoint_and_resume_training)
+                      resume=opt.resume, resume_model_name=opt.load_checkpoint_and_resume_training, evalutaion=opt.eval)
     print('Training of seq2seq is done ' + str(datetime.datetime.now()))
 
 # beam_search = Seq2seq(seq2seq.encoder, TopKDecoder(seq2seq.decoder, 5))

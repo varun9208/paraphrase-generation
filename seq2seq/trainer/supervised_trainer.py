@@ -87,7 +87,7 @@ class SupervisedTrainer(object):
         return torch.tensor(orig_seq)
 
     def _train_epoches(self, data, model, n_epochs, start_epoch, start_step,
-                       dev_data=None, teacher_forcing_ratio=0):
+                       dev_data=None, teacher_forcing_ratio=0, evalutaion=False):
         log = self.logger
 
         print_loss_total = 0  # Reset every print_every
@@ -160,6 +160,14 @@ class SupervisedTrainer(object):
                                input_vocab=data.fields[seq2seq.src_field_name].vocab,
                                output_vocab=data.fields[seq2seq.tgt_field_name].vocab).save(self.expt_dir)
 
+            if step_elapsed == 0 and evalutaion:
+                log_msg = ''
+                if dev_data is not None:
+                    dev_loss, accuracy = self.evaluator.evaluate(model, dev_data)
+                    self.optimizer.update(dev_loss, epoch)
+                    log_msg += "Dev %s: %.4f, Accuracy: %.4f" % (self.loss.name, dev_loss, accuracy)
+                    model.train(mode=True)
+
             if step_elapsed == 0: continue
 
             epoch_loss_avg = epoch_loss_total / min(steps_per_epoch, step - start_step)
@@ -177,7 +185,7 @@ class SupervisedTrainer(object):
 
     def train(self, model, data, num_epochs=5,
               resume=False, dev_data=None,
-              optimizer=None, teacher_forcing_ratio=0, resume_model_name=''):
+              optimizer=None, teacher_forcing_ratio=0, resume_model_name='', evalutaion=False):
         """ Run training for a given model.
 
         Args:
@@ -224,5 +232,5 @@ class SupervisedTrainer(object):
 
         self._train_epoches(data, model, num_epochs,
                             start_epoch, step, dev_data=dev_data,
-                            teacher_forcing_ratio=teacher_forcing_ratio)
+                            teacher_forcing_ratio=teacher_forcing_ratio, evalutaion=evalutaion)
         return model
