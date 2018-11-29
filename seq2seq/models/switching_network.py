@@ -36,8 +36,17 @@ class SwitchingNetworkModel(nn.Module):
     def train_model(self, context_vector, output_form_last_rnn_in_decoder, y):
 
         # Forward pass
-        outputs = self(context_vector, output_form_last_rnn_in_decoder)
-        loss = self.criterion(outputs, y)
+        # self(context_vector[0].unsqueeze(0), output_form_last_rnn_in_decoder[0])
+
+        outputs = []
+
+        for x in range(0, context_vector.size(0)):
+            output = self(context_vector[x].unsqueeze(0), output_form_last_rnn_in_decoder[x])
+            outputs.append(output)
+
+
+        # outputs = self(context_vector, output_form_last_rnn_in_decoder)
+        loss = self.criterion(torch.FloatTensor(outputs).unsqueeze(0), y)
 
         # Backward and optimize
         self.optimizer.zero_grad()

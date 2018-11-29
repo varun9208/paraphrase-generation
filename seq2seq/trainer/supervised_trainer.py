@@ -167,6 +167,7 @@ class SupervisedTrainer(object):
                     self.optimizer.update(dev_loss, epoch)
                     log_msg += "Dev %s: %.4f, Accuracy: %.4f" % (self.loss.name, dev_loss, accuracy)
                     model.train(mode=True)
+                    log.info(log_msg)
 
             if step_elapsed == 0: continue
 
@@ -205,7 +206,7 @@ class SupervisedTrainer(object):
         if resume:
             latest_checkpoint_path = Checkpoint.get_latest_checkpoint(self.expt_dir)
             if not resume_model_name is None or not resume_model_name == '':
-                list_of_path=latest_checkpoint_path.split('/')
+                list_of_path = latest_checkpoint_path.split('/')
                 list_of_path[-1] = resume_model_name
                 latest_checkpoint_path = '/'.join(list_of_path)
             resume_checkpoint = Checkpoint.load(latest_checkpoint_path)

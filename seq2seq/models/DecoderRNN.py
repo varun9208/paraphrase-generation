@@ -101,7 +101,7 @@ class DecoderRNN(BaseRNN):
                      testing=False, use_teacher_forcing=False):
         # Input_var(batch_size*output_size*bidirectional)(Original output from decoder.)
         # input_var is original output. we need to check its output size that's why we need it here.
-        # encoder_outputs(batch_size*layers_in_encoders*bidirectional)(Context Vector).
+        # encoder_outputs is all the outputs from encoder layers(batch_size*no_of_words*hidden_layer*2)
         # hidden(layer*layers_in_encoders*bidirectional) (output from the Encoder)
         batch_size = input_var.size(0)
         output_size = input_var.size(1)
@@ -124,18 +124,24 @@ class DecoderRNN(BaseRNN):
         if self.copy_mechanism:
             #For dev dataset and train dataset
             if not testing and use_teacher_forcing:
+                output_var = []
                 for x in range(0, input_var.size(0)):
-                    temp_hidden = prev_hidden[0][x].view(1, -1)
-                    temp_encoder_output = encoder_outputs[x].unsqueeze(0)
+                    # temp_hidden = hidden[0][x].view(1, -1)
+                    # temp_encoder_output = encoder_outputs[x].unsqueeze(0)
                     if int(input_var[x]) == 0:
-                        self.switching_network_model.train_model(temp_encoder_output, temp_hidden, torch.FloatTensor([0]))
+                        output_var.append(0)
+                        # self.switching_network_model.train_model(temp_encoder_output, temp_hidden, torch.FloatTensor([[0]]))
                     else:
-                        self.switching_network_model.train_model(temp_encoder_output, temp_hidden, torch.FloatTensor([1]))
+                        output_var.append(1)
+                        # self.switching_network_model.train_model(temp_encoder_output, temp_hidden, torch.FloatTensor([[1]]))
+                res_shaped_hidden = hidden.view(batch_size, -1).unsqueeze(1)
+                # res_shaped_enocder_outputs = encoder_outputs.unsqueeze(1)
+                self.switching_network_model.train_model(encoder_outputs, res_shaped_hidden, torch.FloatTensor(torch.FloatTensor([output_var])))
             # For testing purpose
             else:
                 list_of_prob_of_z_t_1 = []
                 for x in range(0, input_var.size(0)):
-                    prob_of_z_t_1 = self.switching_network_model(encoder_outputs[x].unsqueeze(0), prev_hidden[0][x].view(1, -1))
+                    prob_of_z_t_1 = self.switching_network_model(encoder_outputs[x].unsqueeze(0), hidden[0][x].view(1, -1))
                     list_of_prob_of_z_t_1.append(float(prob_of_z_t_1))
 
             # Takes probability of pointer vocab keywords for copy mechanism and to copy word form source sentence
@@ -168,7 +174,8 @@ class DecoderRNN(BaseRNN):
 
         # Here encoder_inputs is a list of original input to encode which is a vector of indices from pointer vocab of each sentence.
         # list_of_pointer_vocab_for_source_sentences is the list of source pointer vocab
-        # encoder_outputs is last output from
+        # encoder_outputs is all the outputs from encoder layers(batch_size*no_of_words*hidden_layer*2)
+        # encoder_hidden is last output from encoder
         # encoder_inputs are real input which has pointer input like [35000, 350001, 35002]
 
         ret_dict = dict()

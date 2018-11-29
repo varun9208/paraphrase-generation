@@ -39,7 +39,7 @@ parser.add_argument('--expt_dir', action='store', dest='expt_dir', default='./ex
 parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint',
                     help='The name of the checkpoint to load, usually an encoded time string and directly goes to prediction step')
 parser.add_argument('--load_checkpoint_and_resume_training', action='store', dest='load_checkpoint_and_resume_training',
-                    help='The name of the checkpoint to load, usually an encoded time string', default='2018_11_23_16_13_49')
+                    help='The name of the checkpoint to load, usually an encoded time string', default='')
 parser.add_argument('--resume', action='store_true', dest='resume',
                     default=False,
                     help='Indicates if training has to be resumed from the latest checkpoint')
@@ -47,7 +47,7 @@ parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
 parser.add_argument('--copy_mechanism', action='store_true', dest='copy_mechanism',
-                    default=False,
+                    default=True,
                     help='Indicates whether to use copy mechanism or not')
 parser.add_argument('--eval', action='store_true', dest='eval',
                     default=False,
@@ -150,7 +150,7 @@ else:
     if not opt.resume:
         # Initialize model
         # [128,512,1024]
-        hidden_size = 256
+        hidden_size = 128
         # encoder = EncoderRNN(len(src.vocab), max_len, hidden_size, n_layers=layers,
         #                      bidirectional=True, variable_lengths=True)
         # decoder = DecoderRNN(len(tgt.vocab), max_len, hidden_size * 2 if bidirectional else hidden_size,
@@ -182,7 +182,7 @@ else:
     print('Initailization of seq2seq is done ' + str(datetime.datetime.now()))
     t = SupervisedTrainer(loss=loss, batch_size=250,
                           checkpoint_every=1000,
-                          print_every=100, expt_dir=opt.expt_dir,copy_mechanism=copy_mechanism)
+                          print_every=10, expt_dir=opt.expt_dir,copy_mechanism=copy_mechanism)
     print('Initailization of supervisor trainer is done ' + str(datetime.datetime.now()))
 
     seq2seq = t.train(seq2seq, train,
@@ -213,7 +213,7 @@ def create_pointer_vocab(seq_str):
 
 
 while True:
-    copy_mechanism = False
+    copy_mechanism = True
     print('Copy mechanism is ' + str(copy_mechanism) + 'in predictor in testing')
     seq_str = raw_input("Type in a source sequence:")
     if copy_mechanism:

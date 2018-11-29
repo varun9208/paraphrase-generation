@@ -49,6 +49,8 @@ class Seq2seq(nn.Module):
                 teacher_forcing_ratio=0, list_of_pointer_vocab_for_source_sentences=None,
                 list_orig_input_variables=None, testing=False):
         encoder_outputs, encoder_hidden = self.encoder(input_variable, input_lengths, testing=testing)
+        # encoder_outputs = all the hidden states of encoder
+        # encoder_hidden = final output from encoder
         result = self.decoder(inputs=target_variable,
                               encoder_hidden=encoder_hidden,
                               encoder_outputs=encoder_outputs,
