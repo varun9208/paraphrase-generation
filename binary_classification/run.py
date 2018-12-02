@@ -169,7 +169,7 @@ for epoch in range(N_EPOCHS):
         f'| Epoch: {epoch+1:02} | Train Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}% | Val. Loss: {valid_loss:.3f} | Val. Acc: {valid_acc*100:.2f}% |')
 
 # test accuracy
-test_loss, test_acc = model.evaluate(model, test_iterator, criterion)
+test_loss, test_acc = evaluate(model, test_iterator, criterion)
 
 print(f'| Test Loss: {test_loss:.3f} | Test Acc: {test_acc*100:.2f}% |')
 
