@@ -88,4 +88,4 @@ class SwitchingNetworkModel(nn.Module):
         """
 
         state_dict = torch.load(model_path)
-        self.load_state_dict(state_dict)
+        self.load_state_dict(state_dict[0])

@@ -36,10 +36,10 @@ parser.add_argument('--dev_path', action='store', dest='dev_path',
                     help='Path to dev data')
 parser.add_argument('--expt_dir', action='store', dest='expt_dir', default='./experiment',
                     help='Path to experiment directory. If load_checkpoint is True, then path to checkpoint directory has to be provided')
-parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint',
+parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint', default='2018_12_01_20_26_27',
                     help='The name of the checkpoint to load, usually an encoded time string and directly goes to prediction step')
 parser.add_argument('--load_checkpoint_and_resume_training', action='store', dest='load_checkpoint_and_resume_training',
-                    help='The name of the checkpoint to load, usually an encoded time string', default='')
+                    help='The name of the checkpoint to load, usually an encoded time string(Used for explicity mentioning the modal name)', default='')
 parser.add_argument('--resume', action='store_true', dest='resume',
                     default=False,
                     help='Indicates if training has to be resumed from the latest checkpoint')
@@ -51,6 +51,9 @@ parser.add_argument('--copy_mechanism', action='store_true', dest='copy_mechanis
                     help='Indicates whether to use copy mechanism or not')
 parser.add_argument('--eval', action='store_true', dest='eval',
                     default=False,
+                    help='Indicates whether We just need to evaluate model on dev data')
+parser.add_argument('--switching_network_name', action='store_true', dest='switching_network_name',
+                    default=None,
                     help='Indicates whether We just need to evaluate model on dev data')
 
 opt = parser.parse_args()
@@ -67,6 +70,8 @@ if opt.load_checkpoint is not None:
     checkpoint_path = os.path.join(opt.expt_dir, Checkpoint.CHECKPOINT_DIR_NAME, opt.load_checkpoint)
     checkpoint = Checkpoint.load(checkpoint_path)
     seq2seq = checkpoint.model
+    if opt.switching_network_name is not None and not opt.switching_network_name == '':
+        seq2seq.decoder.load_switching_network_model(opt.switching_network_name)
     input_vocab = checkpoint.input_vocab
     output_vocab = checkpoint.output_vocab
 

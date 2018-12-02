@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import torch.nn.functional as F
+import time
 
 from .attention import Attention, PointerAttention
 from .switching_network import SwitchingNetworkModel
@@ -97,6 +98,9 @@ class DecoderRNN(BaseRNN):
         if self.copy_mechanism:
             self.switching_network_model = SwitchingNetworkModel(self.hidden_size)
 
+    def load_switching_network_model(self, filename):
+        self.switching_network_model.load_model(filename)
+
     def forward_step(self, input_var, hidden, encoder_outputs, function, list_of_pointer_vocab_for_source_sentences,
                      testing=False, use_teacher_forcing=False):
         # Input_var(batch_size*output_size*bidirectional)(Original output from decoder.)
@@ -137,6 +141,8 @@ class DecoderRNN(BaseRNN):
                 res_shaped_hidden = hidden.view(batch_size, -1).unsqueeze(1)
                 # res_shaped_enocder_outputs = encoder_outputs.unsqueeze(1)
                 self.switching_network_model.train_model(encoder_outputs, res_shaped_hidden, torch.FloatTensor(torch.FloatTensor([output_var])))
+                checkpoint_name = time.strftime("%Y_%m_%d_%H_%M_%S")
+                self.switching_network_model.save_model('examples/switching_network_checkpoint/'+str(checkpoint_name))
             # For testing purpose
             else:
                 list_of_prob_of_z_t_1 = []
