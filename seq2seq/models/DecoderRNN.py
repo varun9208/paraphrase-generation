@@ -84,6 +84,7 @@ class DecoderRNN(BaseRNN):
         self.sos_id = sos_id
         self.n_layers = n_layers
         self.source_vocab_output_size = source_vocab_size
+        self.itr = 10000
         self.copy_mechanism = copy_mechanism
 
         self.init_input = None
@@ -141,8 +142,12 @@ class DecoderRNN(BaseRNN):
                 res_shaped_hidden = hidden.view(batch_size, -1).unsqueeze(1)
                 # res_shaped_enocder_outputs = encoder_outputs.unsqueeze(1)
                 self.switching_network_model.train_model(encoder_outputs, res_shaped_hidden, torch.FloatTensor(torch.FloatTensor([output_var])))
-                checkpoint_name = time.strftime("%Y_%m_%d_%H_%M_%S")
-                self.switching_network_model.save_model('experiment/switching_network_checkpoint/'+str(checkpoint_name))
+                if self.itr <= 0:
+                    self.itr = 10000
+                    checkpoint_name = time.strftime("%Y_%m_%d_%H_%M_%S")
+                    self.switching_network_model.save_model('experiment/switching_network_checkpoint/'+str(checkpoint_name))
+                else:
+                    self.itr = self.itr - batch_size
             # For testing purpose
             else:
                 list_of_prob_of_z_t_1 = []
