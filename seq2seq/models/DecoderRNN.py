@@ -142,7 +142,7 @@ class DecoderRNN(BaseRNN):
                 # res_shaped_enocder_outputs = encoder_outputs.unsqueeze(1)
                 self.switching_network_model.train_model(encoder_outputs, res_shaped_hidden, torch.FloatTensor(torch.FloatTensor([output_var])))
                 checkpoint_name = time.strftime("%Y_%m_%d_%H_%M_%S")
-                self.switching_network_model.save_model('examples/switching_network_checkpoint/'+str(checkpoint_name))
+                self.switching_network_model.save_model('experiment/switching_network_checkpoint/'+str(checkpoint_name))
             # For testing purpose
             else:
                 list_of_prob_of_z_t_1 = []
