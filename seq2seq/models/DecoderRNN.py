@@ -227,7 +227,10 @@ class DecoderRNN(BaseRNN):
                     location_of_word = decoder_outputs[-1].topk(1)[1]
                     index_from_pointer_vocab = \
                     list(list_of_pointer_vocab_for_source_sentences[0].items())[location_of_word][1]
-                    symbols = torch.LongTensor([index_from_pointer_vocab]).unsqueeze(1)
+                    if torch.cuda.is_available():
+                        symbols = torch.cuda.LongTensor([index_from_pointer_vocab]).unsqueeze(1)
+                    else:
+                        symbols = torch.LongTensor([index_from_pointer_vocab]).unsqueeze(1)
 
                 # if common vocab is choosen
                 else:
@@ -244,7 +247,11 @@ class DecoderRNN(BaseRNN):
                     for x in range(0, symbols.size(0)):
                         if not testing and int(symbols[x]) > 33000:
                             # convert it back to unknown with 0 tensor for next input.
-                            symbols[x] = torch.LongTensor([0]).unsqueeze(1)
+                            if torch.cuda.is_available():
+                                symbols[x] = torch.cuda.LongTensor([0]).unsqueeze(1)
+                            else:
+                                symbols[x] = torch.LongTensor([0]).unsqueeze(1)
+
                     sequence_symbols.append(symbols)
             else:
                 sequence_symbols.append(symbols)
