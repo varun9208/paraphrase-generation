@@ -44,9 +44,12 @@ class SwitchingNetworkModel(nn.Module):
             output = self(context_vector[x].unsqueeze(0), output_form_last_rnn_in_decoder[x])
             outputs.append(output)
 
-
-        # outputs = self(context_vector, output_form_last_rnn_in_decoder)
-        loss = self.criterion(torch.FloatTensor(outputs).unsqueeze(0), y)
+        if torch.cuda.is_available():
+            # outputs = self(context_vector, output_form_last_rnn_in_decoder)
+            loss = self.criterion(torch.cuda.FloatTensor(outputs).unsqueeze(0), y)
+        else:
+            # outputs = self(context_vector, output_form_last_rnn_in_decoder)
+            loss = self.criterion(torch.FloatTensor(outputs).unsqueeze(0), y)
 
         # Backward and optimize
         self.optimizer.zero_grad()

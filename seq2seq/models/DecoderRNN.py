@@ -141,7 +141,11 @@ class DecoderRNN(BaseRNN):
                         # self.switching_network_model.train_model(temp_encoder_output, temp_hidden, torch.FloatTensor([[1]]))
                 res_shaped_hidden = hidden.view(batch_size, -1).unsqueeze(1)
                 # res_shaped_enocder_outputs = encoder_outputs.unsqueeze(1)
-                self.switching_network_model.train_model(encoder_outputs, res_shaped_hidden, torch.FloatTensor(torch.FloatTensor([output_var])))
+                if torch.cuda.is_available():
+                    self.switching_network_model.train_model(encoder_outputs, res_shaped_hidden, torch.cuda.FloatTensor(torch.cuda.FloatTensor([output_var])))
+                else:
+                    self.switching_network_model.train_model(encoder_outputs, res_shaped_hidden,
+                                                             torch.FloatTensor(torch.FloatTensor([output_var])))
                 if self.itr <= 0:
                     self.itr = 10000
                     checkpoint_name = time.strftime("%Y_%m_%d_%H_%M_%S")
