@@ -165,7 +165,7 @@ print('Epoch started')
 for epoch in range(N_EPOCHS):
     train_loss, train_acc = train(model, train_iterator, optimizer, criterion)
     valid_loss, valid_acc = evaluate(model, valid_iterator, criterion)
-    model.save_model('binary_classification_' +str(epoch))
+    model.save_model('binary_classification_' +str(epoch)+'.ckpt')
     print(
         f'| Epoch: {epoch+1:02} | Train Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}% | Val. Loss: {valid_loss:.3f} | Val. Acc: {valid_acc*100:.2f}% |')
 
