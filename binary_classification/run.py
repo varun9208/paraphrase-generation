@@ -29,7 +29,7 @@ def train(model, iterator, optimizer, criterion):
 
     model.train()
 
-    for batch in iterator.batches:
+    for batch in iterator:
         optimizer.zero_grad()
 
         predictions = model(batch.text).squeeze(1)
