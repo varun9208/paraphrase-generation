@@ -3,10 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class CNN(nn.Module):
-    def __init__(self, vocab_size, embedding_dim, n_filters, filter_sizes, output_dim, dropout):
+    def __init__(self, vocab_size, embedding_dim, n_filters, filter_sizes, output_dim, dropout, logging):
         super().__init__()
 
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.logging = logging
         self.convs = nn.ModuleList(
             [nn.Conv2d(in_channels=1, out_channels=n_filters, kernel_size=(fs, embedding_dim)) for fs in filter_sizes])
         self.fc = nn.Linear(len(filter_sizes) * n_filters, output_dim)
@@ -49,7 +50,7 @@ class CNN(nn.Module):
         """
 
         torch.save([self.state_dict()], model_path)
-        print('Model Saved')
+        self.logging.info('Model Saved')
 
     def load_model(self, model_path=''):
         """
@@ -60,4 +61,4 @@ class CNN(nn.Module):
 
         state_dict = torch.load(model_path)
         self.load_state_dict(state_dict[0])
-        print('Model Loaded')
+        self.logging.info('Model Loaded')

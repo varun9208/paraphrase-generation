@@ -5,6 +5,7 @@ from binary_classification.cnn_model import CNN
 import torch.nn as nn
 import torch.nn.functional as F
 import spacy
+import logging
 import os
 import argparse
 nlp = spacy.load('en')
@@ -16,6 +17,23 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--load_model', action='store', dest='load_checkpoint', default='',
                     help='The name of the trained model to load')
+parser.add_argument('--log-level', dest='log_level',
+                    default='info',
+                    help='Logging level.')
+parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
+                    default=True,
+                    help='Indicates whether logs needs to be saved in file or to be shown on console')
+
+
+opt = parser.parse_args()
+
+LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
+if opt.log_in_file:
+    logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()), filename='check_logs.log',
+                        filemode='w')
+else:
+    logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
+logging.info(opt)
 
 SEED = 1234
 
@@ -89,27 +107,27 @@ def predict_sentiment(sentence, min_len=5):
     return prediction.item()
 
 # prepare dataset
-print('preparing dataset')
+logging.info('preparing dataset')
 TEXT = data.Field(tokenize='spacy')
 LABEL = data.Field()
 
 train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
-print('train and test data created')
+logging.info('train and test data created')
 
 train_data, valid_data = train_data.split(random_state=random.seed(SEED))
 
-print('train and test data created')
+logging.info('train and test data created')
 
 # Build the vocab and load the pre-trained word embeddings.
 TEXT.build_vocab(train_data, max_size=25000, vectors="glove.6B.100d")
 LABEL.build_vocab(train_data)
-print('Vocab built')
+logging.info('Vocab built')
 
 # create the iterators.
 BATCH_SIZE = 64
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print('Device Selected %s' %(str(device)))
+logging.info('Device Selected %s' %(str(device)))
 
 train_iterator = data.BucketIterator(
             dataset=train_data, batch_size=BATCH_SIZE,
@@ -128,7 +146,7 @@ test_iterator = data.BucketIterator(
 #     batch_size=BATCH_SIZE,
 #     device=device)
 
-print('3 iteratores created')
+logging.info('3 iteratores created')
 
 # create an instance of our CNN class
 INPUT_DIM = len(TEXT.vocab)
@@ -138,19 +156,19 @@ FILTER_SIZES = [3, 4, 5]
 OUTPUT_DIM = 1
 DROPOUT = 0.5
 
-model = CNN(INPUT_DIM, EMBEDDING_DIM, N_FILTERS, FILTER_SIZES, OUTPUT_DIM, DROPOUT)
+model = CNN(INPUT_DIM, EMBEDDING_DIM, N_FILTERS, FILTER_SIZES, OUTPUT_DIM, DROPOUT, logging)
 
-print('Model instance created')
+logging.info('Model instance created')
 
 # load the pre-trained embeddings
 pretrained_embeddings = TEXT.vocab.vectors
 
 model.embedding.weight.data.copy_(pretrained_embeddings)
 
-print('Loaded pretrained embeddings')
+logging.info('Loaded pretrained embeddings')
 
 # train model
-print('Training model now')
+logging.info('Training model now')
 optimizer = optim.Adam(model.parameters())
 
 criterion = nn.BCEWithLogitsLoss()
@@ -160,19 +178,19 @@ criterion = criterion.to(device)
 
 N_EPOCHS = 5
 
-print('Epoch started')
+logging.info('Epoch started')
 
 for epoch in range(N_EPOCHS):
     train_loss, train_acc = train(model, train_iterator, optimizer, criterion)
     valid_loss, valid_acc = evaluate(model, valid_iterator, criterion)
     model.save_model('binary_classification_' +str(epoch)+'.ckpt')
-    print(
+    logging.info(
         f'| Epoch: {epoch+1:02} | Train Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}% | Val. Loss: {valid_loss:.3f} | Val. Acc: {valid_acc*100:.2f}% |')
 
 # test accuracy
 test_loss, test_acc = evaluate(model, test_iterator, criterion)
 
-print(f'| Test Loss: {test_loss:.3f} | Test Acc: {test_acc*100:.2f}% |')
+logging.info(f'| Test Loss: {test_loss:.3f} | Test Acc: {test_acc*100:.2f}% |')
 
 
 
