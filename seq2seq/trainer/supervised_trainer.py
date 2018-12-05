@@ -160,6 +160,9 @@ class SupervisedTrainer(object):
                                input_vocab=data.fields[seq2seq.src_field_name].vocab,
                                output_vocab=data.fields[seq2seq.tgt_field_name].vocab).save(self.expt_dir)
 
+            checkpoint_name = time.strftime("%Y_%m_%d_%H_%M_%S")
+            model.decoder.save_switching_network_model('experiment/switching_network_checkpoint/'+str(checkpoint_name)+'_epoch_'+str(epoch))
+
             Checkpoint(model=model,
                        optimizer=self.optimizer,
                        epoch=epoch, step=step,

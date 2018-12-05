@@ -101,6 +101,8 @@ class DecoderRNN(BaseRNN):
 
     def load_switching_network_model(self, filename):
         self.switching_network_model.load_model(filename)
+    def save_switching_network_model(self, filename):
+        self.switching_network_model.save_model(filename)
 
     def forward_step(self, input_var, hidden, encoder_outputs, function, list_of_pointer_vocab_for_source_sentences,
                      testing=False, use_teacher_forcing=False):
