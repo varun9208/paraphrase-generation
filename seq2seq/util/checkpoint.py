@@ -36,7 +36,7 @@ class Checkpoint(object):
     INPUT_VOCAB_FILE = 'input_vocab.pt'
     OUTPUT_VOCAB_FILE = 'output_vocab.pt'
 
-    def __init__(self, model, optimizer, epoch, step, input_vocab, output_vocab, path=None):
+    def __init__(self, model, optimizer, epoch, step, input_vocab, output_vocab, path=None, is_epoch_completed=False):
         self.model = model
         self.optimizer = optimizer
         self.input_vocab = input_vocab
@@ -44,6 +44,7 @@ class Checkpoint(object):
         self.epoch = epoch
         self.step = step
         self._path = path
+        self._epoch_completed = is_epoch_completed
 
     @property
     def path(self):
@@ -61,6 +62,8 @@ class Checkpoint(object):
              str: path to the saved checkpoint subdirectory
         """
         date_time = time.strftime('%Y_%m_%d_%H_%M_%S', time.localtime())
+        if self._epoch_completed:
+            date_time = date_time + '_epoch_' + str(self.epoch)
 
         self._path = os.path.join(experiment_dir, self.CHECKPOINT_DIR_NAME, date_time)
         path = self._path

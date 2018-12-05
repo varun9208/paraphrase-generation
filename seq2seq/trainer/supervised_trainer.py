@@ -160,6 +160,12 @@ class SupervisedTrainer(object):
                                input_vocab=data.fields[seq2seq.src_field_name].vocab,
                                output_vocab=data.fields[seq2seq.tgt_field_name].vocab).save(self.expt_dir)
 
+            Checkpoint(model=model,
+                       optimizer=self.optimizer,
+                       epoch=epoch, step=step,
+                       input_vocab=data.fields[seq2seq.src_field_name].vocab,
+                       output_vocab=data.fields[seq2seq.tgt_field_name].vocab, is_epoch_completed=True).save(self.expt_dir)
+
             if step_elapsed == 0 and evalutaion:
                 log_msg = ''
                 if dev_data is not None:
