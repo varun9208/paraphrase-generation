@@ -29,7 +29,7 @@ opt = parser.parse_args()
 
 LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 if opt.log_in_file:
-    logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()), filename='check_logs.log',
+    logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()), filename='check_logs_imdb.log',
                         filemode='w')
 else:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
@@ -37,9 +37,9 @@ logging.info(opt)
 
 SEED = 1234
 
-torch.manual_seed(SEED)
-torch.cuda.manual_seed(SEED)
-torch.backends.cudnn.deterministic = True
+# torch.manual_seed(SEED)
+# torch.cuda.manual_seed(SEED)
+# torch.backends.cudnn.deterministic = True
 
 def train(model, iterator, optimizer, criterion):
     epoch_loss = 0
@@ -47,14 +47,22 @@ def train(model, iterator, optimizer, criterion):
 
     model.train()
 
-    for batch in iterator:
+    logging.info('Generating batch')
+
+    batch_generator = iterator.__iter__()
+
+    logging.info('Batch generation done')
+
+    for batch in batch_generator:
         optimizer.zero_grad()
 
         predictions = model(batch.text).squeeze(1)
 
-        loss = criterion(predictions, batch.label)
+        actual = batch.label.float()
 
-        acc = binary_accuracy(predictions, batch.label)
+        loss = criterion(predictions.unsqueeze(0), actual)
+
+        acc = binary_accuracy(predictions.unsqueeze(0), actual)
 
         loss.backward()
 
@@ -62,6 +70,8 @@ def train(model, iterator, optimizer, criterion):
 
         epoch_loss += loss.item()
         epoch_acc += acc.item()
+
+    logging.info('Batch Training done')
 
     return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
@@ -73,12 +83,15 @@ def evaluate(model, iterator, criterion):
     model.eval()
 
     with torch.no_grad():
-        for batch in iterator:
+        batch_generator = iterator.__iter__()
+        for batch in batch_generator:
             predictions = model(batch.text).squeeze(1)
 
-            loss = criterion(predictions, batch.label)
+            actual = batch.label.float()
 
-            acc = binary_accuracy(predictions, batch.label)
+            loss = criterion(predictions.unsqueeze(0), actual)
+
+            acc = binary_accuracy(predictions.unsqueeze(0), actual)
 
             epoch_loss += loss.item()
             epoch_acc += acc.item()
@@ -114,7 +127,8 @@ LABEL = data.Field()
 train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
 logging.info('train and test data created')
 
-train_data, valid_data = train_data.split(random_state=random.seed(SEED))
+train_data, valid_data =train_data.split(random_state=random.seed(200))
+# train_data, valid_data = train_test_split(train_data, test_size=0.2, random_state=200)
 
 logging.info('train and test data created')
 
@@ -131,15 +145,15 @@ logging.info('Device Selected %s' %(str(device)))
 
 train_iterator = data.BucketIterator(
             dataset=train_data, batch_size=BATCH_SIZE,
-            device=device)
+            device=-1)
 
 valid_iterator = data.BucketIterator(
             dataset=valid_data, batch_size=BATCH_SIZE,
-            device=device)
+            device=-1)
 
 test_iterator = data.BucketIterator(
             dataset=test_data, batch_size=BATCH_SIZE,
-            device=device)
+            device=-1)
 
 # train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits(
 #     (train_data, valid_data, test_data),
@@ -176,13 +190,17 @@ criterion = nn.BCEWithLogitsLoss()
 model = model.to(device)
 criterion = criterion.to(device)
 
-N_EPOCHS = 5
+N_EPOCHS = 15
 
 logging.info('Epoch started')
 
 for epoch in range(N_EPOCHS):
+    logging.info('Training epoch %s' %(epoch))
     train_loss, train_acc = train(model, train_iterator, optimizer, criterion)
+    logging.info('Training Done epoch %s' % (epoch))
+    logging.info('Evaluation started epoch %s' % (epoch))
     valid_loss, valid_acc = evaluate(model, valid_iterator, criterion)
+    logging.info('Evaluation Done epoch %s' % (epoch))
     model.save_model('binary_classification_' +str(epoch)+'.ckpt')
     logging.info(
         f'| Epoch: {epoch+1:02} | Train Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}% | Val. Loss: {valid_loss:.3f} | Val. Acc: {valid_acc*100:.2f}% |')
