@@ -47,22 +47,14 @@ def train(model, iterator, optimizer, criterion):
 
     model.train()
 
-    logging.info('Generating batch')
-
-    batch_generator = iterator.__iter__()
-
-    logging.info('Batch generation done')
-
-    for batch in batch_generator:
+    for batch in iterator:
         optimizer.zero_grad()
 
         predictions = model(batch.text).squeeze(1)
 
-        actual = batch.label.float()
+        loss = criterion(predictions, batch.label)
 
-        loss = criterion(predictions.unsqueeze(0), actual)
-
-        acc = binary_accuracy(predictions.unsqueeze(0), actual)
+        acc = binary_accuracy(predictions, batch.label)
 
         loss.backward()
 
@@ -71,27 +63,21 @@ def train(model, iterator, optimizer, criterion):
         epoch_loss += loss.item()
         epoch_acc += acc.item()
 
-    logging.info('Batch Training done')
-
     return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
 def evaluate(model, iterator, criterion):
-
     epoch_loss = 0
     epoch_acc = 0
 
     model.eval()
 
     with torch.no_grad():
-        batch_generator = iterator.__iter__()
-        for batch in batch_generator:
+        for batch in iterator:
             predictions = model(batch.text).squeeze(1)
 
-            actual = batch.label.float()
+            loss = criterion(predictions, batch.label)
 
-            loss = criterion(predictions.unsqueeze(0), actual)
-
-            acc = binary_accuracy(predictions.unsqueeze(0), actual)
+            acc = binary_accuracy(predictions, batch.label)
 
             epoch_loss += loss.item()
             epoch_acc += acc.item()
@@ -195,12 +181,8 @@ N_EPOCHS = 15
 logging.info('Epoch started')
 
 for epoch in range(N_EPOCHS):
-    logging.info('Training epoch %s' %(epoch))
     train_loss, train_acc = train(model, train_iterator, optimizer, criterion)
-    logging.info('Training Done epoch %s' % (epoch))
-    logging.info('Evaluation started epoch %s' % (epoch))
     valid_loss, valid_acc = evaluate(model, valid_iterator, criterion)
-    logging.info('Evaluation Done epoch %s' % (epoch))
     model.save_model('binary_classification_' +str(epoch)+'.ckpt')
     logging.info(
         f'| Epoch: {epoch+1:02} | Train Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}% | Val. Loss: {valid_loss:.3f} | Val. Acc: {valid_acc*100:.2f}% |')
