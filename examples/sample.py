@@ -3,6 +3,7 @@ import argparse
 import logging
 import spacy
 import torch
+import random
 import csv
 import datetime
 from torch.optim.lr_scheduler import StepLR
@@ -14,7 +15,9 @@ from seq2seq.optim import Optimizer
 from seq2seq.dataset import SourceField, TargetField
 from seq2seq.evaluator import Predictor
 from seq2seq.util.checkpoint import Checkpoint
+import pandas as pd
 import re
+import string
 
 try:
     raw_input  # Python 2
@@ -36,7 +39,8 @@ parser.add_argument('--dev_path', action='store', dest='dev_path',
                     help='Path to dev data')
 parser.add_argument('--expt_dir', action='store', dest='expt_dir', default='./experiment',
                     help='Path to experiment directory. If load_checkpoint is True, then path to checkpoint directory has to be provided')
-parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint', default=None,
+parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint',
+                    default='2018_12_09_07_11_07_epoch_4_ptr',
                     help='The name of the checkpoint to load, usually an encoded time string and directly goes to prediction step')
 parser.add_argument('--load_checkpoint_and_resume_training', action='store', dest='load_checkpoint_and_resume_training',
                     help='The name of the checkpoint to load, usually an encoded time string(Used for explicity mentioning the modal name)',
@@ -48,18 +52,17 @@ parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
 parser.add_argument('--copy_mechanism', action='store_true', dest='copy_mechanism',
-                    default=False,
+                    default=True,
                     help='Indicates whether to use copy mechanism or not')
 parser.add_argument('--eval', action='store_true', dest='eval',
                     default=False,
                     help='Indicates whether We just need to evaluate model on dev data')
 parser.add_argument('--switching_network_name', action='store_true', dest='switching_network_name',
-                    default=None,
+                    default='experiment/switching_network_checkpoint/2018_12_10_04_08_39_epoch_5',
                     help='Indicates whether We just need to evaluate model on dev data')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
                     default=True,
                     help='Indicates whether logs needs to be saved in file or to be shown on console')
-
 
 opt = parser.parse_args()
 spacy_en = spacy.load('en')
@@ -211,6 +214,7 @@ else:
 print('Copy mechanism is ' + str(opt.copy_mechanism) + 'in predictor')
 predictor_beam = Predictor(seq2seq, input_vocab, output_vocab, opt.copy_mechanism)
 
+
 def create_pointer_vocab(seq_str):
     seq = seq_str.strip()
     seq = seq.replace("'", " ")
@@ -225,11 +229,53 @@ def create_pointer_vocab(seq_str):
     return pointer_vocab, seq
 
 
+def get_IMDB_test_dataset():
+    TEXT = torchtext.data.Field(tokenize='spacy')
+    LABEL = torchtext.data.Field()
+    train_data, test_data = torchtext.datasets.IMDB.splits(TEXT, LABEL)
+
+    train_data, valid_data = train_data.split(random_state=random.seed(200))
+
+    return train_data
+
+
 while True:
-    copy_mechanism = False
+    copy_mechanism = True
+    generate_paraphrases_for_imdb_dateset = True
     print('Copy mechanism is ' + str(copy_mechanism) + 'in predictor in testing')
-    seq_str = raw_input("Type in a source sequence:")
-    if copy_mechanism:
-        pointer_vocab, seq_str = create_pointer_vocab(seq_str)
-        predictor_beam.set_pointer_vocab(pointer_vocab)
-    print(predictor_beam.predict(seq_str))
+    if generate_paraphrases_for_imdb_dateset:
+        orig_sen = []
+        para_sen = []
+        label_sen = []
+        train_data = get_IMDB_test_dataset().examples
+        i = 0
+        print('Total Examples ' + str(len(train_data)))
+        for sample in train_data:
+            print('Example ' + str(i))
+            Label = sample.label[0]
+            label_sen.append(Label)
+            sentence = ' '.join(sample.text)
+            seq = sentence.strip()
+            seq = seq.replace("'", " ")
+            seq = seq.lower()
+            remove_punct_map = dict.fromkeys(map(ord, string.punctuation))
+            seq = seq.translate(remove_punct_map)
+            seq = re.sub(' +', ' ', seq).strip()
+            paraphrase = predictor_beam.predict(seq)
+            print('Source Length ' + str(len(sample.text)))
+            print('Prediction Length ' + str(len(paraphrase)))
+            orig_sen.append(sample.text)
+            para_sen.append(paraphrase)
+            print('Example Done ' + str(i))
+            i = i + 1
+
+        all_sentences = {'orig_sen': orig_sen, 'para_sen': para_sen, 'label': label_sen}
+        new_df = pd.DataFrame(data=all_sentences)
+        new_df.to_csv('train_augment_dataset_ptr' + '.csv', sep='\t')
+
+    else:
+        seq_str = raw_input("Type in a source sequence:")
+        if copy_mechanism:
+            pointer_vocab, seq_str = create_pointer_vocab(seq_str)
+            predictor_beam.set_pointer_vocab(pointer_vocab)
+        print(predictor_beam.predict(seq_str))

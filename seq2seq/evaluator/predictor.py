@@ -30,6 +30,7 @@ class Predictor(object):
 
     def create_pointer_vocab(self, seq_str):
         seq = seq_str.strip()
+        seq = seq.replace("'", " ")
         list_of_words_in_source_sentence = re.sub("[^\w]", " ", seq).split()
         unique_words = []
         for x in list_of_words_in_source_sentence:
@@ -43,7 +44,10 @@ class Predictor(object):
     def get_orig_input_variable(self, list_of_words_in_seq_str, pointer_vocab):
         orig_seq = []
         for word in list_of_words_in_seq_str:
-            orig_seq.append(pointer_vocab[word])
+            if word in pointer_vocab:
+                orig_seq.append(pointer_vocab[word])
+            else:
+                print('hello')
         return torch.tensor(orig_seq)
 
 
@@ -53,9 +57,17 @@ class Predictor(object):
         if torch.cuda.is_available():
             src_id_seq = src_id_seq.cuda()
 
+        # Enable this for pointer prediction
+
         list_of_pointer_vocab_for_source_sentence = [self.create_pointer_vocab(src_seq)]
 
         list_orig_input_variables = [self.get_orig_input_variable(src_seq.lower().split(' '), list_of_pointer_vocab_for_source_sentence[-1])]
+
+        # Enable this for attention prediction
+
+        # list_of_pointer_vocab_for_source_sentence = []
+        #
+        # list_orig_input_variables = []
 
         with torch.no_grad():
             softmax_list, _, other = self.model(src_id_seq, [len(src_seq.split(' '))],
@@ -90,7 +102,10 @@ class Predictor(object):
             if self.copy_mechanism and int(tok) > 34000:
                 tgt_seq.append(self.return_word(int(tok)))
             else:
-                tgt_seq.append(self.tgt_vocab.itos[int(tok)])
+                try:
+                    tgt_seq.append(self.tgt_vocab.itos[int(tok)])
+                except Exception as e:
+                    print('Hello')
         # tgt_seq = [self.tgt_vocab.itos[tok] for tok in tgt_id_seq]
         return tgt_seq
 

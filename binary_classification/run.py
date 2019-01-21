@@ -8,6 +8,7 @@ import spacy
 import logging
 import os
 import argparse
+from sklearn.model_selection import train_test_split
 nlp = spacy.load('en')
 
 import torch.optim as optim
@@ -21,7 +22,7 @@ parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
-                    default=True,
+                    default=False,
                     help='Indicates whether logs needs to be saved in file or to be shown on console')
 
 
@@ -34,6 +35,7 @@ if opt.log_in_file:
 else:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
 logging.info(opt)
+
 
 SEED = 1234
 
@@ -52,9 +54,9 @@ def train(model, iterator, optimizer, criterion):
 
         predictions = model(batch.text).squeeze(1)
 
-        loss = criterion(predictions, batch.label)
+        loss = criterion(predictions, torch.FloatTensor(batch.label.numpy()))
 
-        acc = binary_accuracy(predictions, batch.label)
+        acc = binary_accuracy(predictions, torch.FloatTensor(batch.label.numpy()))
 
         loss.backward()
 
@@ -108,7 +110,7 @@ def predict_sentiment(sentence, min_len=5):
 # prepare dataset
 logging.info('preparing dataset')
 TEXT = data.Field(tokenize='spacy')
-LABEL = data.Field()
+LABEL = data.Field(sequential=False, unk_token=None)
 
 train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
 logging.info('train and test data created')
@@ -129,22 +131,22 @@ BATCH_SIZE = 64
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 logging.info('Device Selected %s' %(str(device)))
 
-train_iterator = data.BucketIterator(
-            dataset=train_data, batch_size=BATCH_SIZE,
-            device=-1)
+# train_iterator = data.BucketIterator(
+#             dataset=train_data, batch_size=BATCH_SIZE,
+#             device=-1)
+#
+# valid_iterator = data.BucketIterator(
+#             dataset=valid_data, batch_size=BATCH_SIZE,
+#             device=-1)
+#
+# test_iterator = data.BucketIterator(
+#             dataset=test_data, batch_size=BATCH_SIZE,
+#             device=-1)
 
-valid_iterator = data.BucketIterator(
-            dataset=valid_data, batch_size=BATCH_SIZE,
-            device=-1)
-
-test_iterator = data.BucketIterator(
-            dataset=test_data, batch_size=BATCH_SIZE,
-            device=-1)
-
-# train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits(
-#     (train_data, valid_data, test_data),
-#     batch_size=BATCH_SIZE,
-#     device=device)
+train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits(
+    (train_data, valid_data, test_data),
+    batch_size=BATCH_SIZE,
+    device=-1)
 
 logging.info('3 iteratores created')
 
