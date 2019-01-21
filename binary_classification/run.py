@@ -22,7 +22,7 @@ parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
-                    default=False,
+                    default=True,
                     help='Indicates whether logs needs to be saved in file or to be shown on console')
 
 
@@ -77,9 +77,9 @@ def evaluate(model, iterator, criterion):
         for batch in iterator:
             predictions = model(batch.text).squeeze(1)
 
-            loss = criterion(predictions, batch.label)
+            loss = criterion(predictions, torch.FloatTensor(batch.label.numpy()))
 
-            acc = binary_accuracy(predictions, batch.label)
+            acc = binary_accuracy(predictions, torch.FloatTensor(batch.label.numpy()))
 
             epoch_loss += loss.item()
             epoch_acc += acc.item()
@@ -178,7 +178,7 @@ criterion = nn.BCEWithLogitsLoss()
 model = model.to(device)
 criterion = criterion.to(device)
 
-N_EPOCHS = 15
+N_EPOCHS = 10
 
 logging.info('Epoch started')
 
