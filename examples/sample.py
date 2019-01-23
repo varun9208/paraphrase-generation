@@ -40,7 +40,7 @@ parser.add_argument('--dev_path', action='store', dest='dev_path',
 parser.add_argument('--expt_dir', action='store', dest='expt_dir', default='./experiment',
                     help='Path to experiment directory. If load_checkpoint is True, then path to checkpoint directory has to be provided')
 parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint',
-                    default='2018_12_09_07_11_07_epoch_4_ptr',
+                    default='2018_12_07_07_50_33_epoch_3_attn',
                     help='The name of the checkpoint to load, usually an encoded time string and directly goes to prediction step')
 parser.add_argument('--load_checkpoint_and_resume_training', action='store', dest='load_checkpoint_and_resume_training',
                     help='The name of the checkpoint to load, usually an encoded time string(Used for explicity mentioning the modal name)',
@@ -52,13 +52,13 @@ parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
 parser.add_argument('--copy_mechanism', action='store_true', dest='copy_mechanism',
-                    default=True,
+                    default=False,
                     help='Indicates whether to use copy mechanism or not')
 parser.add_argument('--eval', action='store_true', dest='eval',
                     default=False,
                     help='Indicates whether We just need to evaluate model on dev data')
 parser.add_argument('--switching_network_name', action='store_true', dest='switching_network_name',
-                    default='experiment/switching_network_checkpoint/2018_12_10_04_08_39_epoch_5',
+                    default='',
                     help='Indicates whether We just need to evaluate model on dev data')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
                     default=True,
@@ -234,13 +234,11 @@ def get_IMDB_test_dataset():
     LABEL = torchtext.data.Field()
     train_data, test_data = torchtext.datasets.IMDB.splits(TEXT, LABEL)
 
-    train_data, valid_data = train_data.split(random_state=random.seed(200))
-
-    return train_data
+    return test_data
 
 
 while True:
-    copy_mechanism = True
+    copy_mechanism = False
     generate_paraphrases_for_imdb_dateset = True
     print('Copy mechanism is ' + str(copy_mechanism) + 'in predictor in testing')
     if generate_paraphrases_for_imdb_dateset:
@@ -255,23 +253,29 @@ while True:
             Label = sample.label[0]
             label_sen.append(Label)
             sentence = ' '.join(sample.text)
-            seq = sentence.strip()
-            seq = seq.replace("'", " ")
-            seq = seq.lower()
+            all_sentences = sentence.split('.')
+            final_prediction_sentence = []
             remove_punct_map = dict.fromkeys(map(ord, string.punctuation))
-            seq = seq.translate(remove_punct_map)
-            seq = re.sub(' +', ' ', seq).strip()
-            paraphrase = predictor_beam.predict(seq)
-            print('Source Length ' + str(len(sample.text)))
-            print('Prediction Length ' + str(len(paraphrase)))
+            paraphrase = []
+            for sub_sentence in all_sentences:
+                seq = sub_sentence.strip()
+                seq = seq.replace("'", " ")
+                seq = seq.lower()
+                seq = seq.translate(remove_punct_map)
+                seq = re.sub(' +', ' ', seq).strip()
+                if not seq == "" and not seq is None:
+                    final_prediction_sentence.extend(predictor_beam.predict(seq))
+                    # print('Source Length ' + str(len(sample.text)))
+                    # print('Prediction Length ' + str(len(paraphrase)))
+
             orig_sen.append(sample.text)
-            para_sen.append(paraphrase)
+            para_sen.append(final_prediction_sentence)
             print('Example Done ' + str(i))
             i = i + 1
 
         all_sentences = {'orig_sen': orig_sen, 'para_sen': para_sen, 'label': label_sen}
         new_df = pd.DataFrame(data=all_sentences)
-        new_df.to_csv('train_augment_dataset_ptr' + '.csv', sep='\t')
+        new_df.to_csv('train_augment_dataset_attn_new_test' + '.csv')
 
     else:
         seq_str = raw_input("Type in a source sequence:")

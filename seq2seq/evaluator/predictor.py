@@ -59,15 +59,15 @@ class Predictor(object):
 
         # Enable this for pointer prediction
 
-        list_of_pointer_vocab_for_source_sentence = [self.create_pointer_vocab(src_seq)]
-
-        list_orig_input_variables = [self.get_orig_input_variable(src_seq.lower().split(' '), list_of_pointer_vocab_for_source_sentence[-1])]
+        # list_of_pointer_vocab_for_source_sentence = [self.create_pointer_vocab(src_seq)]
+        #
+        # list_orig_input_variables = [self.get_orig_input_variable(src_seq.lower().split(' '), list_of_pointer_vocab_for_source_sentence[-1])]
 
         # Enable this for attention prediction
 
-        # list_of_pointer_vocab_for_source_sentence = []
-        #
-        # list_orig_input_variables = []
+        list_of_pointer_vocab_for_source_sentence = []
+
+        list_orig_input_variables = []
 
         with torch.no_grad():
             softmax_list, _, other = self.model(src_id_seq, [len(src_seq.split(' '))],

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import os
 
 class CNN(nn.Module):
     def __init__(self, vocab_size, embedding_dim, n_filters, filter_sizes, output_dim, dropout, logging):
@@ -57,8 +58,10 @@ class CNN(nn.Module):
         This function loads the model parameters, along with data input
         features mean and standard deviation vectors.
         :param model_path: file path (string)
+
         """
 
         state_dict = torch.load(model_path)
         self.load_state_dict(state_dict[0])
         self.logging.info('Model Loaded')
+
