@@ -10,6 +10,7 @@ import os
 import pandas as pd
 import argparse
 import ast
+import csv
 from sklearn.model_selection import train_test_split
 
 nlp = spacy.load('en')
@@ -29,10 +30,10 @@ parser.add_argument('--use_imdb_dataset', dest='use_imdb_dataset',
                     default=True,
                     help='Whether to use imdb dataset or not')
 parser.add_argument('--dataset_file_name', dest='dataset_file_name',
-                    default='../train_augment_dataset_attn_new.csv',
+                    default='../train_augment_dataset_attn_new_test.csv',
                     help='Give other file name other than imdb dataset')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
-                    default=False,
+                    default=True,
                     help='Indicates whether logs needs to be saved in file or to be shown on console')
 
 opt = parser.parse_args()
@@ -40,7 +41,7 @@ opt = parser.parse_args()
 LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 if opt.log_in_file:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()),
-                        filename='check_logs_imdb.log',
+                        filename='check_logs_imdb_results.log',
                         filemode='w')
 else:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
@@ -176,7 +177,7 @@ model.embedding.weight.data.copy_(pretrained_embeddings)
 
 logging.info('Loaded pretrained embeddings')
 
-if opt.load_model is not None or not opt.load_model == "":
+if opt.load_model is None or opt.load_model == "":
     # train model
     logging.info('Training model now')
     optimizer = optim.Adam(model.parameters())
@@ -203,16 +204,27 @@ if opt.load_model is not None or not opt.load_model == "":
     logging.info(f'| Test Loss: {test_loss:.3f} | Test Acc: {test_acc*100:.2f}% |')
 
 else:
-    df = pd.read_csv(opt.dataset_file_name, sep='\t')
+    df = pd.read_csv(opt.dataset_file_name)
     list_para_sen = df['para_sen'].tolist()
+    list_orig_sen = df['orig_sen'].tolist()
     list_label = df['label'].tolist()
 
     total_sample = 0
     total_correct_sample = 0
-    for para_sen, label in zip(list_para_sen, list_label):
+    for orig_sen, para_sen, label in zip(list_orig_sen, list_para_sen, list_label):
         prob_for_pos =predict_sentiment(' '.join(ast.literal_eval(para_sen)))
-        if (prob_for_pos>0.5 and label == 'pos') or (prob_for_pos<0.5 and label == 'neg'):
+        if (prob_for_pos > 0.5 and label == 'pos') or (prob_for_pos < 0.5 and label == 'neg'):
+            with open('train_augment_dataset_attn_new_test_results.tsv', 'a') as f:
+                writer = csv.writer(f, delimiter='\t')
+                writer.writerow([orig_sen, para_sen, label, 'Right'])
+            print('Correctly Classified')
             total_correct_sample = total_correct_sample + 1
+        else:
+            with open('train_augment_dataset_attn_new_test_results.tsv', 'a') as f:
+                writer = csv.writer(f, delimiter='\t')
+                writer.writerow([orig_sen, para_sen, label, 'Wrong'])
+
+        print('Total Sample' + str(total_sample))
         total_sample = total_sample + 1
     logging.info('Test Accuracy is = ', str((total_correct_sample/total_sample)*100))
 
