@@ -40,7 +40,7 @@ parser.add_argument('--dev_path', action='store', dest='dev_path',
 parser.add_argument('--expt_dir', action='store', dest='expt_dir', default='./experiment',
                     help='Path to experiment directory. If load_checkpoint is True, then path to checkpoint directory has to be provided')
 parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint',
-                    default='2018_12_07_07_50_33_epoch_3_attn',
+                    default='2018_12_09_07_11_07_epoch_4_ptr',
                     help='The name of the checkpoint to load, usually an encoded time string and directly goes to prediction step')
 parser.add_argument('--load_checkpoint_and_resume_training', action='store', dest='load_checkpoint_and_resume_training',
                     help='The name of the checkpoint to load, usually an encoded time string(Used for explicity mentioning the modal name)',
@@ -52,13 +52,13 @@ parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
 parser.add_argument('--copy_mechanism', action='store_true', dest='copy_mechanism',
-                    default=False,
+                    default=True,
                     help='Indicates whether to use copy mechanism or not')
 parser.add_argument('--eval', action='store_true', dest='eval',
                     default=False,
                     help='Indicates whether We just need to evaluate model on dev data')
 parser.add_argument('--switching_network_name', action='store_true', dest='switching_network_name',
-                    default='',
+                    default='experiment/switching_network_checkpoint/2018_12_10_04_08_39_epoch_5',
                     help='Indicates whether We just need to evaluate model on dev data')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
                     default=True,
@@ -238,7 +238,7 @@ def get_IMDB_test_dataset():
 
 
 while True:
-    copy_mechanism = False
+    copy_mechanism = True
     generate_paraphrases_for_imdb_dateset = True
     print('Copy mechanism is ' + str(copy_mechanism) + 'in predictor in testing')
     if generate_paraphrases_for_imdb_dateset:
@@ -275,7 +275,8 @@ while True:
 
         all_sentences = {'orig_sen': orig_sen, 'para_sen': para_sen, 'label': label_sen}
         new_df = pd.DataFrame(data=all_sentences)
-        new_df.to_csv('train_augment_dataset_attn_new_test' + '.csv')
+        new_df.to_csv('train_augment_dataset_ptr_new_test' + '.csv')
+        break
 
     else:
         seq_str = raw_input("Type in a source sequence:")

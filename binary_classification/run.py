@@ -2,6 +2,7 @@ import torch
 from torchtext import data, datasets
 import random
 from binary_classification.cnn_model import CNN
+from binary_classification.rnn_model import RNN
 import torch.nn as nn
 import torch.nn.functional as F
 import spacy
@@ -21,8 +22,10 @@ parser = argparse.ArgumentParser()
 
 # parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_5.ckpt',
 #                     help='The name of the trained model to load')
-parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_5.ckpt',
+parser.add_argument('--load_model', action='store', dest='load_model', default=None,
                     help='The name of the trained model to load')
+parser.add_argument('--model_to_use', dest='model_to_use', default='first',
+                    help='model_number_to_use')
 parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
@@ -30,7 +33,7 @@ parser.add_argument('--use_imdb_dataset', dest='use_imdb_dataset',
                     default=True,
                     help='Whether to use imdb dataset or not')
 parser.add_argument('--dataset_file_name', dest='dataset_file_name',
-                    default='../train_augment_dataset_attn_new_test.csv',
+                    default='../train_augment_dataset_ptr_new_test.csv',
                     help='Give other file name other than imdb dataset')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
                     default=True,
@@ -41,7 +44,7 @@ opt = parser.parse_args()
 LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 if opt.log_in_file:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()),
-                        filename='check_logs_imdb_results.log',
+                        filename='check_logs_imdb_results_attn_latest.log',
                         filemode='w')
 else:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
@@ -155,14 +158,24 @@ train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits(
 logging.info('3 iteratores created')
 
 # create an instance of our CNN class
-INPUT_DIM = len(TEXT.vocab)
-EMBEDDING_DIM = 100
-N_FILTERS = 100
-FILTER_SIZES = [3, 4, 5]
-OUTPUT_DIM = 1
-DROPOUT = 0.5
+if opt.model_to_use == 'fourth':
+    INPUT_DIM = len(TEXT.vocab)
+    EMBEDDING_DIM = 100
+    N_FILTERS = 100
+    FILTER_SIZES = [3, 4, 5]
+    OUTPUT_DIM = 1
+    DROPOUT = 0.5
 
-model = CNN(INPUT_DIM, EMBEDDING_DIM, N_FILTERS, FILTER_SIZES, OUTPUT_DIM, DROPOUT, logging)
+    model = CNN(INPUT_DIM, EMBEDDING_DIM, N_FILTERS, FILTER_SIZES, OUTPUT_DIM, DROPOUT, logging)
+
+elif opt.model_to_use == 'first':
+    INPUT_DIM = len(TEXT.vocab)
+    EMBEDDING_DIM = 100
+    HIDDEN_DIM = 256
+    OUTPUT_DIM = 1
+
+    model = RNN(INPUT_DIM, EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM)
+
 
 if opt.load_model is not None or not opt.load_model == "":
     model.load_model(opt.load_model)
@@ -180,7 +193,10 @@ logging.info('Loaded pretrained embeddings')
 if opt.load_model is None or opt.load_model == "":
     # train model
     logging.info('Training model now')
-    optimizer = optim.Adam(model.parameters())
+    if opt.model_to_use == "fourth":
+        optimizer = optim.Adam(model.parameters())
+    elif opt.model_to_use == "first":
+        optimizer = optim.SGD(model.parameters(), lr=1e-3)
 
     criterion = nn.BCEWithLogitsLoss()
 
@@ -194,7 +210,10 @@ if opt.load_model is None or opt.load_model == "":
     for epoch in range(N_EPOCHS):
         train_loss, train_acc = train(model, train_iterator, optimizer, criterion)
         valid_loss, valid_acc = evaluate(model, valid_iterator, criterion)
-        model.save_model('binary_classification_' + str(epoch) + '.ckpt')
+        if opt.model_to_use == "first":
+            model.save_model('binary_classification_rnn_' + str(epoch) + '.ckpt')
+        elif opt.model_to_use == "fourth":
+            model.save_model('binary_classification_cnn_' + str(epoch) + '.ckpt')
         logging.info(
             f'| Epoch: {epoch+1:02} | Train Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}% | Val. Loss: {valid_loss:.3f} | Val. Acc: {valid_acc*100:.2f}% |')
 
@@ -208,23 +227,39 @@ else:
     list_para_sen = df['para_sen'].tolist()
     list_orig_sen = df['orig_sen'].tolist()
     list_label = df['label'].tolist()
+    correct_positive = 0
+    false_positive = 0
+    correct_negative = 0
+    false_negative = 0
 
     total_sample = 0
     total_correct_sample = 0
     for orig_sen, para_sen, label in zip(list_orig_sen, list_para_sen, list_label):
-        prob_for_pos =predict_sentiment(' '.join(ast.literal_eval(para_sen)))
+        prob_for_pos =predict_sentiment(' '.join(ast.literal_eval(orig_sen)))
         if (prob_for_pos > 0.5 and label == 'pos') or (prob_for_pos < 0.5 and label == 'neg'):
-            with open('train_augment_dataset_attn_new_test_results.tsv', 'a') as f:
+            if prob_for_pos > 0.5:
+                correct_positive = correct_positive + 1
+            if prob_for_pos < 0.5:
+                correct_negative = correct_negative + 1
+            with open('train_augment_dataset_original_new_test_results.tsv', 'a') as f:
                 writer = csv.writer(f, delimiter='\t')
                 writer.writerow([orig_sen, para_sen, label, 'Right'])
             print('Correctly Classified')
             total_correct_sample = total_correct_sample + 1
         else:
-            with open('train_augment_dataset_attn_new_test_results.tsv', 'a') as f:
+            if prob_for_pos > 0.5:
+                false_positive = false_positive + 1
+            if prob_for_pos < 0.5:
+                false_negative = false_negative + 1
+            with open('train_augment_dataset_original_new_test_rXZesults.tsv', 'a') as f:
                 writer = csv.writer(f, delimiter='\t')
                 writer.writerow([orig_sen, para_sen, label, 'Wrong'])
 
-        print('Total Sample' + str(total_sample))
         total_sample = total_sample + 1
     logging.info('Test Accuracy is = ', str((total_correct_sample/total_sample)*100))
+    logging.info('Total Sample' + str(total_sample))
+    logging.info('Correct Positive' + str(correct_positive))
+    logging.info('Correct Negative' + str(correct_negative))
+    logging.info('False Positive' + str(false_positive))
+    logging.info('False Negative' + str(false_negative))
 
