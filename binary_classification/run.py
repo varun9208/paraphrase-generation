@@ -3,6 +3,8 @@ from torchtext import data, datasets
 import random
 from binary_classification.cnn_model import CNN
 from binary_classification.rnn_model import RNN
+from binary_classification.bidirectional_rnn_model import BIRNN
+from binary_classification.fast_text_model import FastText
 import torch.nn as nn
 import torch.nn.functional as F
 import spacy
@@ -138,10 +140,20 @@ def make_imdb_test_dataset(iterator):
 
     return training_examples, labels
 
+def generate_bigrams(x):
+    n_grams = set(zip(*[x[i:] for i in range(2)]))
+    for n_gram in n_grams:
+        x.append(' '.join(n_gram))
+    return x
+
 
 # prepare dataset
 logging.info('preparing dataset')
-TEXT = data.Field(tokenize='spacy')
+if opt.model_to_use == 'third':
+    TEXT = data.Field(tokenize='spacy', preprocessing=generate_bigrams)
+else:
+    TEXT = data.Field(tokenize='spacy')
+
 LABEL = data.Field(sequential=False, unk_token=None)
 
 train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
@@ -154,7 +166,10 @@ train_data, valid_data = train_data.split(random_state=random.seed(200))
 logging.info('train and test data created')
 
 # Build the vocab and load the pre-trained word embeddings.
-TEXT.build_vocab(train_data, max_size=25000, vectors="glove.6B.100d")
+if opt.model_to_use == "first":
+    TEXT.build_vocab(train_data, max_size=25000)
+else:
+    TEXT.build_vocab(train_data, max_size=25000, vectors="glove.6B.100d")
 LABEL.build_vocab(train_data)
 logging.info('Vocab built')
 
@@ -190,6 +205,23 @@ elif opt.model_to_use == 'first':
 
     model = RNN(INPUT_DIM, EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, logging)
 
+elif opt.model_to_use == 'second':
+    INPUT_DIM = len(TEXT.vocab)
+    EMBEDDING_DIM = 100
+    HIDDEN_DIM = 256
+    OUTPUT_DIM = 1
+    N_LAYERS = 2
+    BIDIRECTIONAL = True
+    DROPOUT = 0.5
+
+    model = BIRNN(INPUT_DIM, EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, N_LAYERS, BIDIRECTIONAL, DROPOUT, logging)
+
+elif opt.model_to_use == "third":
+    INPUT_DIM = len(TEXT.vocab)
+    EMBEDDING_DIM = 100
+    OUTPUT_DIM = 1
+
+    model = FastText(INPUT_DIM, EMBEDDING_DIM, OUTPUT_DIM, logging)
 
 if opt.load_model is not None and not opt.load_model == "":
     model.load_model(opt.load_model)
@@ -197,17 +229,18 @@ if opt.load_model is not None and not opt.load_model == "":
 else:
     logging.info('Model instance created')
 
-# load the pre-trained embeddings
-pretrained_embeddings = TEXT.vocab.vectors
+if not opt.model_to_use == "first":
+    # load the pre-trained embeddings
+    pretrained_embeddings = TEXT.vocab.vectors
 
-model.embedding.weight.data.copy_(pretrained_embeddings)
+    model.embedding.weight.data.copy_(pretrained_embeddings)
 
-logging.info('Loaded pretrained embeddings')
+    logging.info('Loaded pretrained embeddings')
 
 if opt.load_model is None or opt.load_model == "":
     # train model
     logging.info('Training model now')
-    if opt.model_to_use == "fourth":
+    if opt.model_to_use == "fourth" or opt.model_to_use == "second" or opt.model_to_use == "third":
         optimizer = optim.Adam(model.parameters())
     elif opt.model_to_use == "first":
         optimizer = optim.SGD(model.parameters(), lr=1e-3)
@@ -228,13 +261,16 @@ if opt.load_model is None or opt.load_model == "":
             model.save_model('binary_classification_rnn_' + str(epoch) + '.ckpt')
         elif opt.model_to_use == "fourth":
             model.save_model('binary_classification_cnn_' + str(epoch) + '.ckpt')
+        elif opt.model_to_use == "second":
+            model.save_model('binary_classification_birnn_' + str(epoch) + '.ckpt')
+        elif opt.model_to_use == "third":
+            model.save_model('binary_classification_fasttext_' + str(epoch) + '.ckpt')
         logging.info(
             f'| Epoch: {epoch+1:02} | Train Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}% | Val. Loss: {valid_loss:.3f} | Val. Acc: {valid_acc*100:.2f}% |')
+        # test accuracy
+        test_loss, test_acc = evaluate(model, test_iterator, criterion)
 
-    # test accuracy
-    test_loss, test_acc = evaluate(model, test_iterator, criterion)
-
-    logging.info(f'| Test Loss: {test_loss:.3f} | Test Acc: {test_acc*100:.2f}% |')
+        logging.info(f'| Test Loss: {test_loss:.3f} | Test Acc: {test_acc*100:.2f}% |')
 
 elif opt.test_imdb_dataset:
     examples, labels = make_imdb_test_dataset(test_iterator)
