@@ -22,10 +22,12 @@ parser = argparse.ArgumentParser()
 
 # parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_5.ckpt',
 #                     help='The name of the trained model to load')
-parser.add_argument('--load_model', action='store', dest='load_model', default=None,
+parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_5.ckpt',
                     help='The name of the trained model to load')
-parser.add_argument('--model_to_use', dest='model_to_use', default='first',
+parser.add_argument('--model_to_use', dest='model_to_use', default='fourth',
                     help='model_number_to_use')
+parser.add_argument('--test_imdb_dataset', dest='test_imdb_dataset', default=True,
+                    help='to only evaluate on test dataset')
 parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
@@ -124,6 +126,18 @@ def predict_sentiment(sentence, min_len=5):
     prediction = torch.sigmoid(model(tensor))
     return prediction.item()
 
+def make_imdb_test_dataset(iterator):
+    dataset = test_iterator.dataset.examples
+
+    training_examples = []
+    labels = []
+
+    for sample in dataset:
+        labels.append(sample.label)
+        training_examples.append(sample.text)
+
+    return training_examples, labels
+
 
 # prepare dataset
 logging.info('preparing dataset')
@@ -174,7 +188,7 @@ elif opt.model_to_use == 'first':
     HIDDEN_DIM = 256
     OUTPUT_DIM = 1
 
-    model = RNN(INPUT_DIM, EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM)
+    model = RNN(INPUT_DIM, EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, logging)
 
 
 if opt.load_model is not None and not opt.load_model == "":
@@ -221,6 +235,43 @@ if opt.load_model is None or opt.load_model == "":
     test_loss, test_acc = evaluate(model, test_iterator, criterion)
 
     logging.info(f'| Test Loss: {test_loss:.3f} | Test Acc: {test_acc*100:.2f}% |')
+
+elif opt.test_imdb_dataset:
+    examples, labels = make_imdb_test_dataset(test_iterator)
+    correct_positive = 0
+    false_positive = 0
+    correct_negative = 0
+    false_negative = 0
+    total_sample = 0
+    total_correct_sample = 0
+    for orig_sen, label in zip(examples, labels):
+        prob_for_pos =predict_sentiment(' '.join(ast.literal_eval(orig_sen)))
+        if (prob_for_pos > 0.5 and label == 'pos') or (prob_for_pos < 0.5 and label == 'neg'):
+            if prob_for_pos > 0.5:
+                correct_positive = correct_positive + 1
+            if prob_for_pos < 0.5:
+                correct_negative = correct_negative + 1
+            with open('test_imdb_dataset_classified_examples.tsv', 'a') as f:
+                writer = csv.writer(f, delimiter='\t')
+                writer.writerow([orig_sen, label, 'Right'])
+            print('Correctly Classified')
+            total_correct_sample = total_correct_sample + 1
+        else:
+            if prob_for_pos > 0.5:
+                false_positive = false_positive + 1
+            if prob_for_pos < 0.5:
+                false_negative = false_negative + 1
+            with open('test_imdb_dataset_classified_examples.tsv', 'a') as f:
+                writer = csv.writer(f, delimiter='\t')
+                writer.writerow([orig_sen, label, 'Wrong'])
+
+        total_sample = total_sample + 1
+    logging.info('Test Accuracy is = ', str((total_correct_sample/total_sample)*100))
+    logging.info('Total Sample' + str(total_sample))
+    logging.info('Correct Positive' + str(correct_positive))
+    logging.info('Correct Negative' + str(correct_negative))
+    logging.info('False Positive' + str(false_positive))
+    logging.info('False Negative' + str(false_negative))
 
 else:
     df = pd.read_csv(opt.dataset_file_name)
