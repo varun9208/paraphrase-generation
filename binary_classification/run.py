@@ -177,7 +177,7 @@ elif opt.model_to_use == 'first':
     model = RNN(INPUT_DIM, EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM)
 
 
-if opt.load_model is not None or not opt.load_model == "":
+if opt.load_model is not None and not opt.load_model == "":
     model.load_model(opt.load_model)
     logging.info('Model Loaded')
 else:
