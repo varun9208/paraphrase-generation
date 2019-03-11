@@ -22,12 +22,14 @@ import torch.optim as optim
 
 parser = argparse.ArgumentParser()
 
+# binary_classification_fasttext_5.ckpt
+
 # parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_5.ckpt',
 #                     help='The name of the trained model to load')
-parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_5.ckpt',
+parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_rnn_5.ckpt',
                     help='The name of the trained model to load')
-parser.add_argument('--model_to_use', dest='model_to_use', default='fourth',
-                    help='model_number_to_use')
+parser.add_argument('--model_to_use', dest='model_to_use', default='first',
+                    help='first')
 parser.add_argument('--test_imdb_dataset', dest='test_imdb_dataset', default=True,
                     help='to only evaluate on test dataset')
 parser.add_argument('--log-level', dest='log_level',
@@ -37,7 +39,7 @@ parser.add_argument('--use_imdb_dataset', dest='use_imdb_dataset',
                     default=True,
                     help='Whether to use imdb dataset or not')
 parser.add_argument('--dataset_file_name', dest='dataset_file_name',
-                    default='../train_augment_dataset_ptr_new_test.csv',
+                    default='../train_augment_dataset_attn_new_test.csv',
                     help='Give other file name other than imdb dataset')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
                     default=True,
@@ -48,7 +50,7 @@ opt = parser.parse_args()
 LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 if opt.log_in_file:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()),
-                        filename='check_logs_imdb_results_attn_latest.log',
+                        filename='check_logs_second_model.log',
                         filemode='w')
 else:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
@@ -118,8 +120,11 @@ def binary_accuracy(preds, y):
     return acc
 
 
-def predict_sentiment(sentence, min_len=5):
-    tokenized = [tok.text for tok in nlp.tokenizer(sentence)]
+def predict_sentiment(sentence, min_len=5, full_sentence=True):
+    if full_sentence:
+        tokenized = [tok.text for tok in nlp.tokenizer(sentence)]
+    else:
+        tokenized = sentence
     if len(tokenized) < min_len:
         tokenized += ['<pad>'] * (min_len - len(tokenized))
     indexed = [TEXT.vocab.stoi[t] for t in tokenized]
@@ -250,7 +255,7 @@ if opt.load_model is None or opt.load_model == "":
     model = model.to(device)
     criterion = criterion.to(device)
 
-    N_EPOCHS = 10
+    N_EPOCHS = 6
 
     logging.info('Epoch started')
 
@@ -274,34 +279,50 @@ if opt.load_model is None or opt.load_model == "":
 
 elif opt.test_imdb_dataset:
     examples, labels = make_imdb_test_dataset(test_iterator)
-    correct_positive = 0
-    false_positive = 0
-    correct_negative = 0
-    false_negative = 0
-    total_sample = 0
-    total_correct_sample = 0
-    for orig_sen, label in zip(examples, labels):
-        prob_for_pos =predict_sentiment(' '.join(ast.literal_eval(orig_sen)))
-        if (prob_for_pos > 0.5 and label == 'pos') or (prob_for_pos < 0.5 and label == 'neg'):
-            if prob_for_pos > 0.5:
-                correct_positive = correct_positive + 1
-            if prob_for_pos < 0.5:
-                correct_negative = correct_negative + 1
-            with open('test_imdb_dataset_classified_examples.tsv', 'a') as f:
-                writer = csv.writer(f, delimiter='\t')
-                writer.writerow([orig_sen, label, 'Right'])
-            print('Correctly Classified')
-            total_correct_sample = total_correct_sample + 1
-        else:
-            if prob_for_pos > 0.5:
-                false_positive = false_positive + 1
-            if prob_for_pos < 0.5:
-                false_negative = false_negative + 1
-            with open('test_imdb_dataset_classified_examples.tsv', 'a') as f:
-                writer = csv.writer(f, delimiter='\t')
-                writer.writerow([orig_sen, label, 'Wrong'])
+    TPR = []
+    FPR = []
+    list_of_threshold = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    for threshold in list_of_threshold:
+        correct_positive = 0
+        false_positive = 0
+        correct_negative = 0
+        false_negative = 0
+        total_sample = 0
+        total_correct_sample = 0
+        for orig_sen, label in zip(examples, labels):
+            prob_for_pos =predict_sentiment(orig_sen, full_sentence=False)
+            if (prob_for_pos > threshold and label == 'pos') or (prob_for_pos < threshold and label == 'neg'):
+                if prob_for_pos > threshold:
+                    correct_positive = correct_positive + 1
+                if prob_for_pos < threshold:
+                    correct_negative = correct_negative + 1
+                with open('test_imdb_dataset_classified_examples_TRIAL.tsv', 'a') as f:
+                    writer = csv.writer(f, delimiter='\t')
+                    writer.writerow([orig_sen, label, 'Right'])
+                # print('Correctly Classified')
+                total_correct_sample = total_correct_sample + 1
+            else:
+                if prob_for_pos > threshold:
+                    false_positive = false_positive + 1
+                if prob_for_pos < threshold:
+                    false_negative = false_negative + 1
+                with open('test_imdb_dataset_classified_examples_TRIAL.tsv', 'a') as f:
+                    writer = csv.writer(f, delimiter='\t')
+                    writer.writerow([orig_sen, label, 'Wrong'])
+            total_sample = total_sample + 1
 
-        total_sample = total_sample + 1
+        print('For threshold %s ' %(threshold))
+        Sensitivity = float((correct_positive)/(correct_positive + false_negative))
+        print(Sensitivity)
+        TPR.append(Sensitivity)
+        Specificity = float((correct_negative) / (correct_negative + false_positive))
+        print(Specificity)
+        false_positive_ratio = float(1- Specificity)
+        FPR.append(false_positive_ratio)
+
+    print(TPR)
+    print(FPR)
+
     logging.info('Test Accuracy is = ', str((total_correct_sample/total_sample)*100))
     logging.info('Total Sample' + str(total_sample))
     logging.info('Correct Positive' + str(correct_positive))
@@ -322,7 +343,7 @@ else:
     total_sample = 0
     total_correct_sample = 0
     for orig_sen, para_sen, label in zip(list_orig_sen, list_para_sen, list_label):
-        prob_for_pos =predict_sentiment(' '.join(ast.literal_eval(orig_sen)))
+        prob_for_pos =predict_sentiment(' '.join(ast.literal_eval(para_sen)))
         if (prob_for_pos > 0.5 and label == 'pos') or (prob_for_pos < 0.5 and label == 'neg'):
             if prob_for_pos > 0.5:
                 correct_positive = correct_positive + 1
