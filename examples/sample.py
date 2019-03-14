@@ -6,6 +6,7 @@ import torch
 import random
 import csv
 import datetime
+from examples.baseline_paraphrase_generation import ParaphraseGenerationModelPhraseStringMatch
 from torch.optim.lr_scheduler import StepLR
 import torchtext
 from seq2seq.trainer import SupervisedTrainer
@@ -31,7 +32,8 @@ except NameError:
 #      python examples/sample.py --train_path $TRAIN_PATH --dev_path $DEV_PATH --expt_dir $EXPT_PATH --resume
 #      # resuming from a specific checkpoint
 #      python examples/sample.py --train_path $TRAIN_PATH --dev_path $DEV_PATH --expt_dir $EXPT_PATH --load_checkpoint $CHECKPOINT_DIR
-
+# 'experiment/switching_network_checkpoint/2018_12_10_04_08_39_epoch_5'
+# 2018_12_07_07_50_33_epoch_3_attn
 parser = argparse.ArgumentParser()
 parser.add_argument('--train_path', action='store', dest='train_path',
                     help='Path to train data')
@@ -40,11 +42,14 @@ parser.add_argument('--dev_path', action='store', dest='dev_path',
 parser.add_argument('--expt_dir', action='store', dest='expt_dir', default='./experiment',
                     help='Path to experiment directory. If load_checkpoint is True, then path to checkpoint directory has to be provided')
 parser.add_argument('--load_checkpoint', action='store', dest='load_checkpoint',
-                    default='2018_12_09_07_11_07_epoch_4_ptr',
+                    default='2018_12_07_07_50_33_epoch_3_attn',
                     help='The name of the checkpoint to load, usually an encoded time string and directly goes to prediction step')
 parser.add_argument('--load_checkpoint_and_resume_training', action='store', dest='load_checkpoint_and_resume_training',
                     help='The name of the checkpoint to load, usually an encoded time string(Used for explicity mentioning the modal name)',
                     default='')
+parser.add_argument('--generate_by_replacing', action='store', dest='generate_by_replacing',
+                    help='To create baseline',
+                    default=False)
 parser.add_argument('--resume', action='store_true', dest='resume',
                     default=False,
                     help='Indicates if training has to be resumed from the latest checkpoint')
@@ -52,13 +57,13 @@ parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
 parser.add_argument('--copy_mechanism', action='store_true', dest='copy_mechanism',
-                    default=True,
+                    default=False,
                     help='Indicates whether to use copy mechanism or not')
 parser.add_argument('--eval', action='store_true', dest='eval',
                     default=False,
                     help='Indicates whether We just need to evaluate model on dev data')
 parser.add_argument('--switching_network_name', action='store_true', dest='switching_network_name',
-                    default='experiment/switching_network_checkpoint/2018_12_10_04_08_39_epoch_5',
+                    default=None,
                     help='Indicates whether We just need to evaluate model on dev data')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
                     default=True,
@@ -68,6 +73,7 @@ opt = parser.parse_args()
 spacy_en = spacy.load('en')
 csv.field_size_limit(15000000)
 
+
 LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 if opt.log_in_file:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()), filename='check_logs.log',
@@ -75,6 +81,56 @@ if opt.log_in_file:
 else:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
 logging.info(opt)
+
+def get_IMDB_test_dataset():
+    TEXT = torchtext.data.Field(tokenize='spacy')
+    LABEL = torchtext.data.Field()
+    train_data, test_data = torchtext.datasets.IMDB.splits(TEXT, LABEL)
+
+    return test_data
+
+
+if opt.generate_by_replacing:
+    baseline = ParaphraseGenerationModelPhraseStringMatch()
+
+    test_data = get_IMDB_test_dataset()
+    i = 0
+    label_sen = []
+    orig_sen = []
+    para_sen = []
+
+    for sample in test_data:
+        print('Example ' + str(i))
+        Label = sample.label[0]
+        label_sen.append(Label)
+        sentence = ' '.join(sample.text)
+        all_sentences = sentence.split('.')
+        final_prediction_sentence = ''
+        remove_punct_map = dict.fromkeys(map(ord, string.punctuation))
+        paraphrase = []
+        for sub_sentence in all_sentences:
+            seq = sub_sentence.strip()
+            seq = seq.replace("'", " ")
+            seq = seq.lower()
+            seq = seq.translate(remove_punct_map)
+            seq = re.sub(' +', ' ', seq).strip()
+            if not seq == "" and not seq is None:
+                par = baseline.generate_paraphrases(seq)
+                if len(par) >0:
+                    final_prediction_sentence = final_prediction_sentence + str(par[0]) + '. '
+                else:
+                    final_prediction_sentence = final_prediction_sentence + str(seq) + '. '
+
+        orig_sen.append(sample.text)
+        para_sen.append(final_prediction_sentence)
+        print('Example Done ' + str(i))
+        i = i + 1
+
+    all_sentences = {'orig_sen': orig_sen, 'para_sen': para_sen, 'label': label_sen}
+    new_df = pd.DataFrame(data=all_sentences)
+    new_df.to_csv('train_augment_dataset_baseline' + '.csv')
+    print('hel')
+
 
 if opt.load_checkpoint is not None:
     logging.info("loading checkpoint from {}".format(
@@ -229,17 +285,9 @@ def create_pointer_vocab(seq_str):
     return pointer_vocab, seq
 
 
-def get_IMDB_test_dataset():
-    TEXT = torchtext.data.Field(tokenize='spacy')
-    LABEL = torchtext.data.Field()
-    train_data, test_data = torchtext.datasets.IMDB.splits(TEXT, LABEL)
-
-    return test_data
-
-
 while True:
     copy_mechanism = True
-    generate_paraphrases_for_imdb_dateset = True
+    generate_paraphrases_for_imdb_dateset = False
     print('Copy mechanism is ' + str(copy_mechanism) + 'in predictor in testing')
     if generate_paraphrases_for_imdb_dateset:
         orig_sen = []

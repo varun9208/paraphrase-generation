@@ -26,23 +26,23 @@ parser = argparse.ArgumentParser()
 
 # parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_5.ckpt',
 #                     help='The name of the trained model to load')
-parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_rnn_5.ckpt',
+parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_5.ckpt',
                     help='The name of the trained model to load')
-parser.add_argument('--model_to_use', dest='model_to_use', default='first',
-                    help='first')
-parser.add_argument('--test_imdb_dataset', dest='test_imdb_dataset', default=True,
+parser.add_argument('--model_to_use', dest='model_to_use', default='fourth',
+                    help='model to try first,second,third,fourth')
+parser.add_argument('--test_imdb_dataset', dest='test_imdb_dataset', default=False,
                     help='to only evaluate on test dataset')
 parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
 parser.add_argument('--use_imdb_dataset', dest='use_imdb_dataset',
-                    default=True,
+                    default=False,
                     help='Whether to use imdb dataset or not')
 parser.add_argument('--dataset_file_name', dest='dataset_file_name',
                     default='../train_augment_dataset_attn_new_test.csv',
                     help='Give other file name other than imdb dataset')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
-                    default=True,
+                    default=False,
                     help='Indicates whether logs needs to be saved in file or to be shown on console')
 
 opt = parser.parse_args()
@@ -311,17 +311,17 @@ elif opt.test_imdb_dataset:
                     writer.writerow([orig_sen, label, 'Wrong'])
             total_sample = total_sample + 1
 
-        print('For threshold %s ' %(threshold))
+        logging.info('For threshold %s ', threshold)
         Sensitivity = float((correct_positive)/(correct_positive + false_negative))
-        print(Sensitivity)
+        logging.info(Sensitivity)
         TPR.append(Sensitivity)
         Specificity = float((correct_negative) / (correct_negative + false_positive))
-        print(Specificity)
+        logging.info(Specificity)
         false_positive_ratio = float(1- Specificity)
         FPR.append(false_positive_ratio)
 
-    print(TPR)
-    print(FPR)
+    logging.info(TPR)
+    logging.info(FPR)
 
     logging.info('Test Accuracy is = ', str((total_correct_sample/total_sample)*100))
     logging.info('Total Sample' + str(total_sample))
@@ -335,39 +335,51 @@ else:
     list_para_sen = df['para_sen'].tolist()
     list_orig_sen = df['orig_sen'].tolist()
     list_label = df['label'].tolist()
-    correct_positive = 0
-    false_positive = 0
-    correct_negative = 0
-    false_negative = 0
+    TPR = []
+    FPR = []
+    list_of_threshold = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    for threshold in list_of_threshold:
+        correct_positive = 0
+        false_positive = 0
+        correct_negative = 0
+        false_negative = 0
 
-    total_sample = 0
-    total_correct_sample = 0
-    for orig_sen, para_sen, label in zip(list_orig_sen, list_para_sen, list_label):
-        prob_for_pos =predict_sentiment(' '.join(ast.literal_eval(para_sen)))
-        if (prob_for_pos > 0.5 and label == 'pos') or (prob_for_pos < 0.5 and label == 'neg'):
-            if prob_for_pos > 0.5:
-                correct_positive = correct_positive + 1
-            if prob_for_pos < 0.5:
-                correct_negative = correct_negative + 1
-            with open('train_augment_dataset_original_new_test_results.tsv', 'a') as f:
-                writer = csv.writer(f, delimiter='\t')
-                writer.writerow([orig_sen, para_sen, label, 'Right'])
-            print('Correctly Classified')
-            total_correct_sample = total_correct_sample + 1
-        else:
-            if prob_for_pos > 0.5:
-                false_positive = false_positive + 1
-            if prob_for_pos < 0.5:
-                false_negative = false_negative + 1
-            with open('train_augment_dataset_original_new_test_rXZesults.tsv', 'a') as f:
-                writer = csv.writer(f, delimiter='\t')
-                writer.writerow([orig_sen, para_sen, label, 'Wrong'])
+        total_sample = 0
+        total_correct_sample = 0
+        for orig_sen, para_sen, label in zip(list_orig_sen, list_para_sen, list_label):
+            prob_for_pos =predict_sentiment(' '.join(ast.literal_eval(para_sen)))
+            if (prob_for_pos > threshold and label == 'pos') or (prob_for_pos < threshold and label == 'neg'):
+                if prob_for_pos > threshold:
+                    correct_positive = correct_positive + 1
+                if prob_for_pos < threshold:
+                    correct_negative = correct_negative + 1
+                with open('train_augment_dataset_original_new_test_results_tria_roc_curve.tsv', 'a') as f:
+                    writer = csv.writer(f, delimiter='\t')
+                    writer.writerow([orig_sen, para_sen, label, 'Right'])
+                # print('Correctly Classified')
+                total_correct_sample = total_correct_sample + 1
+            else:
+                if prob_for_pos > threshold:
+                    false_positive = false_positive + 1
+                if prob_for_pos < threshold:
+                    false_negative = false_negative + 1
+                with open('train_augment_dataset_original_new_test_results_tria_roc_curve.tsv', 'a') as f:
+                    writer = csv.writer(f, delimiter='\t')
+                    writer.writerow([orig_sen, para_sen, label, 'Wrong'])
 
-        total_sample = total_sample + 1
-    logging.info('Test Accuracy is = ', str((total_correct_sample/total_sample)*100))
-    logging.info('Total Sample' + str(total_sample))
-    logging.info('Correct Positive' + str(correct_positive))
-    logging.info('Correct Negative' + str(correct_negative))
-    logging.info('False Positive' + str(false_positive))
-    logging.info('False Negative' + str(false_negative))
+            total_sample = total_sample + 1
+
+        logging.info('For threshold %s ', threshold)
+        Sensitivity = float((correct_positive) / (correct_positive + false_negative))
+        logging.info(Sensitivity)
+        TPR.append(Sensitivity)
+        Specificity = float((correct_negative) / (correct_negative + false_positive))
+        logging.info(Specificity)
+        false_positive_ratio = float(1 - Specificity)
+        FPR.append(false_positive_ratio)
+
+    logging.info(TPR)
+    logging.info(FPR)
+
+    logging.info('DONE')
 
