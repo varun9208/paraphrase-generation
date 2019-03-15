@@ -13,6 +13,7 @@ from seq2seq.trainer import SupervisedTrainer
 from seq2seq.models import EncoderRNN, DecoderRNN, Seq2seq, TopKDecoder
 from seq2seq.loss import Perplexity
 from seq2seq.optim import Optimizer
+import nltk
 from seq2seq.dataset import SourceField, TargetField
 from seq2seq.evaluator import Predictor
 from seq2seq.util.checkpoint import Checkpoint
@@ -66,7 +67,7 @@ parser.add_argument('--switching_network_name', action='store_true', dest='switc
                     default=None,
                     help='Indicates whether We just need to evaluate model on dev data')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
-                    default=True,
+                    default=False,
                     help='Indicates whether logs needs to be saved in file or to be shown on console')
 
 opt = parser.parse_args()
@@ -87,7 +88,7 @@ def get_IMDB_test_dataset():
     LABEL = torchtext.data.Field()
     train_data, test_data = torchtext.datasets.IMDB.splits(TEXT, LABEL)
 
-    return test_data
+    return train_data
 
 
 if opt.generate_by_replacing:
@@ -287,7 +288,7 @@ def create_pointer_vocab(seq_str):
 
 while True:
     copy_mechanism = True
-    generate_paraphrases_for_imdb_dateset = False
+    generate_paraphrases_for_imdb_dateset = True
     print('Copy mechanism is ' + str(copy_mechanism) + 'in predictor in testing')
     if generate_paraphrases_for_imdb_dateset:
         orig_sen = []
@@ -301,7 +302,8 @@ while True:
             Label = sample.label[0]
             label_sen.append(Label)
             sentence = ' '.join(sample.text)
-            all_sentences = sentence.split('.')
+            all_sentences = nltk.sent_tokenize(sentence)
+            # all_sentences = sentence.split('.')
             final_prediction_sentence = []
             remove_punct_map = dict.fromkeys(map(ord, string.punctuation))
             paraphrase = []
@@ -312,7 +314,15 @@ while True:
                 seq = seq.translate(remove_punct_map)
                 seq = re.sub(' +', ' ', seq).strip()
                 if not seq == "" and not seq is None:
-                    final_prediction_sentence.extend(predictor_beam.predict(seq))
+                    pointer_vocab, seq_str = create_pointer_vocab(seq)
+                    predictor_beam.set_pointer_vocab(pointer_vocab)
+                    out = predictor_beam.predict(seq_str)
+                    if len(out) == 1:
+                        word_list = nltk.word_tokenize(seq)
+                        word_list.append('.')
+                        final_prediction_sentence.extend(word_list)
+                    else:
+                        final_prediction_sentence.extend(['.' if x == '<eos>' else x for x in out])
                     # print('Source Length ' + str(len(sample.text)))
                     # print('Prediction Length ' + str(len(paraphrase)))
 
@@ -323,7 +333,7 @@ while True:
 
         all_sentences = {'orig_sen': orig_sen, 'para_sen': para_sen, 'label': label_sen}
         new_df = pd.DataFrame(data=all_sentences)
-        new_df.to_csv('train_augment_dataset_ptr_new_test' + '.csv')
+        new_df.to_csv('train_augment_dataset_ptr_copynet' + '.csv')
         break
 
     else:

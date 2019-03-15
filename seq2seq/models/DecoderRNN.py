@@ -82,6 +82,7 @@ class DecoderRNN(BaseRNN):
         self.max_length = max_len
         self.eos_id = eos_id
         self.sos_id = sos_id
+        self.unk_id = 0
         self.n_layers = n_layers
         self.source_vocab_output_size = source_vocab_size
         self.itr = 10000
@@ -256,7 +257,15 @@ class DecoderRNN(BaseRNN):
 
                     sequence_symbols.append(symbols)
             else:
-                sequence_symbols.append(symbols)
+                if True and int(symbols[0][0]) == 0:
+                    index_of_top_attn_wrd=int(torch.max(ret_dict[DecoderRNN.KEY_ATTN_SCORE][-1][0][0], 0)[1])
+                    choosen_key = 0
+                    for key,value in list_of_pointer_vocab_for_source_sentences[0].items():
+                        if value % 35000 == index_of_top_attn_wrd:
+                            choosen_key = value
+                    sequence_symbols.append(torch.tensor([[choosen_key]]))
+                else:
+                    sequence_symbols.append(symbols)
 
             eos_batches = symbols.data.eq(self.eos_id)
             if eos_batches.dim() > 0:
