@@ -42,7 +42,7 @@ parser.add_argument('--dataset_file_name', dest='dataset_file_name',
                     default='../train_augment_dataset_attn_new_test.csv',
                     help='Give other file name other than imdb dataset')
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
-                    default=False,
+                    default=True,
                     help='Indicates whether logs needs to be saved in file or to be shown on console')
 
 opt = parser.parse_args()
@@ -194,6 +194,8 @@ logging.info('Device Selected %s' % (str(device)))
 
 train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits(
     (train_data, valid_data, test_data),
+    sort=False,
+    sort_within_batch=False,
     batch_size=BATCH_SIZE,
     device=-1)
 
@@ -274,7 +276,7 @@ if opt.load_model is None or opt.load_model == "":
             model.save_model('binary_classification_rnn_' + str(epoch) + '.ckpt')
         elif opt.model_to_use == "fourth":
             if not opt.train_on_other_dataset == '':
-                model.save_model('binary_classification_cnn_custom' + str(epoch) + '.ckpt')
+                model.save_model('binary_classification_cnn_COPYNET' + str(epoch) + '.ckpt')
             else:
                 model.save_model('binary_classification_cnn_' + str(epoch) + '.ckpt')
         elif opt.model_to_use == "second":
