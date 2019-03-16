@@ -11,6 +11,7 @@ import spacy
 import logging
 import os
 import pandas as pd
+import torchtext
 import argparse
 import ast
 import csv
@@ -26,18 +27,17 @@ parser = argparse.ArgumentParser()
 
 # parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_5.ckpt',
 #                     help='The name of the trained model to load')
-parser.add_argument('--load_model', action='store', dest='load_model', default='../binary_classification_5.ckpt',
+parser.add_argument('--load_model', action='store', dest='load_model', default=None,
                     help='The name of the trained model to load')
 parser.add_argument('--model_to_use', dest='model_to_use', default='fourth',
                     help='model to try first,second,third,fourth')
 parser.add_argument('--test_imdb_dataset', dest='test_imdb_dataset', default=False,
                     help='to only evaluate on test dataset')
+parser.add_argument('--train_on_other_dataset', dest='train_on_other_dataset', default='../train_augment_dataset_ptr_copynet.csv',
+                    help='to train model on different dataset other than IMDB dataset')
 parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
-parser.add_argument('--use_imdb_dataset', dest='use_imdb_dataset',
-                    default=False,
-                    help='Whether to use imdb dataset or not')
 parser.add_argument('--dataset_file_name', dest='dataset_file_name',
                     default='../train_augment_dataset_attn_new_test.csv',
                     help='Give other file name other than imdb dataset')
@@ -50,7 +50,7 @@ opt = parser.parse_args()
 LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 if opt.log_in_file:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()),
-                        filename='check_logs_second_model.log',
+                        filename='check_logs_cnn_COPYNET.log',
                         filemode='w')
 else:
     logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, opt.log_level.upper()))
@@ -164,11 +164,19 @@ LABEL = data.Field(sequential=False, unk_token=None)
 train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
 logging.info('train and test data created')
 
+if not opt.train_on_other_dataset == '':
+    train_data = torchtext.data.TabularDataset(
+        path=opt.train_on_other_dataset, format='csv', skip_header=True,
+        fields=[('', None),('orig_sen', None), ('text', TEXT), ('label', LABEL)],
+    )
+    train_data, valid_data = train_data.split(random_state=random.seed(200))
+    logging.info('train and valid data loaded from external file')
+else:
+    train_data, valid_data = train_data.split(random_state=random.seed(200))
+    # train_data, valid_data = train_test_split(train_data, test_size=0.2, random_state=200)
 
-train_data, valid_data = train_data.split(random_state=random.seed(200))
-# train_data, valid_data = train_test_split(train_data, test_size=0.2, random_state=200)
+    logging.info('train and valid data created')
 
-logging.info('train and test data created')
 
 # Build the vocab and load the pre-trained word embeddings.
 if opt.model_to_use == "first":
@@ -255,7 +263,7 @@ if opt.load_model is None or opt.load_model == "":
     model = model.to(device)
     criterion = criterion.to(device)
 
-    N_EPOCHS = 6
+    N_EPOCHS = 10
 
     logging.info('Epoch started')
 
@@ -265,7 +273,10 @@ if opt.load_model is None or opt.load_model == "":
         if opt.model_to_use == "first":
             model.save_model('binary_classification_rnn_' + str(epoch) + '.ckpt')
         elif opt.model_to_use == "fourth":
-            model.save_model('binary_classification_cnn_' + str(epoch) + '.ckpt')
+            if not opt.train_on_other_dataset == '':
+                model.save_model('binary_classification_cnn_custom' + str(epoch) + '.ckpt')
+            else:
+                model.save_model('binary_classification_cnn_' + str(epoch) + '.ckpt')
         elif opt.model_to_use == "second":
             model.save_model('binary_classification_birnn_' + str(epoch) + '.ckpt')
         elif opt.model_to_use == "third":
