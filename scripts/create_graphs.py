@@ -17,6 +17,25 @@
 # plt.ylabel('Accuracy')
 # plt.show()
 
+#For copynet model
+# import matplotlib.pyplot as plt
+# import numpy as np
+#
+# x = np.arange(10)
+# y_1 = [13.7516, 4.7995, 3.8258, 3.6387, 3.6166, 3.6146, 3.6139, 3.6147, 3.6138, 3.6140, 3.6145, 3.6146, 3.6145, 3.6147,
+#        3.6148]
+# x_1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+# y_2 = [25.6733, 25.6223, 23.9142, 24.2588, 24.2360, 24.2173, 24.2144, 24.2145, 24.2146, 24.2146, 24.2146, 24.2146,
+#        24.2146, 24.2146, 24.2146]
+# x_2 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+#
+# plt.plot(x_1, y_1)
+# plt.plot(x_2, y_2)
+# plt.legend(['Train', 'Test'], loc='upper right')
+# plt.xlabel('Number of epochs')
+# plt.ylabel('Accuracy')
+# plt.show()
+
 
 #For pointer network model
 # import matplotlib.pyplot as plt
