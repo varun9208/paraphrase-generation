@@ -15,6 +15,7 @@ import torchtext
 import argparse
 import ast
 import csv
+import numpy as np
 from sklearn.model_selection import train_test_split
 
 nlp = spacy.load('en')
@@ -34,7 +35,7 @@ parser.add_argument('--model_to_use', dest='model_to_use', default='fourth',
 parser.add_argument('--test_imdb_dataset', dest='test_imdb_dataset', default=False,
                     help='to only evaluate on test dataset')
 parser.add_argument('--train_on_other_dataset', dest='train_on_other_dataset', default='../train_augment_dataset_ptr_copynet.csv',
-                    help='to train model on different dataset other than IMDB dataset')
+                    help='to train model on different dataset other than IMDB dataset (Using sample rewieghting)')
 parser.add_argument('--log-level', dest='log_level',
                     default='info',
                     help='Logging level.')
@@ -44,6 +45,9 @@ parser.add_argument('--dataset_file_name', dest='dataset_file_name',
 parser.add_argument('--log_in_file', action='store_true', dest='log_in_file',
                     default=True,
                     help='Indicates whether logs needs to be saved in file or to be shown on console')
+parser.add_argument('--enable_sample_reweighting', action='store_true', dest='enable_sample_reweighting',
+                    default=True,
+                    help='If True sample reweighting will be use to propogate error.')
 
 opt = parser.parse_args()
 
@@ -57,7 +61,6 @@ else:
 logging.info(opt)
 
 SEED = 1234
-
 
 # torch.manual_seed(SEED)
 # torch.cuda.manual_seed(SEED)
@@ -73,19 +76,26 @@ def train(model, iterator, optimizer, criterion):
         optimizer.zero_grad()
 
         predictions = model(batch.text).squeeze(1)
+        predictions_orig = model(batch.orig_sen).squeeze(1)
+        predictions = torch.cat((predictions, predictions_orig), 0)
+        labels = torch.cat((torch.FloatTensor(batch.label.numpy()), torch.FloatTensor(batch.label.numpy())), 0)
 
-        loss = criterion(predictions, torch.FloatTensor(batch.label.numpy()))
+        loss = criterion(predictions, labels)
 
-        acc = binary_accuracy(predictions, torch.FloatTensor(batch.label.numpy()))
+        acc = binary_accuracy(predictions, labels)
 
-        loss.backward()
+        if opt.enable_sample_reweighting:
+            loss = loss * torch.from_numpy(np.nan_to_num([0.5] * 2*len(batch))).type(torch.FloatTensor).view(-1)
+            loss.mean().backward(retain_graph=True)
+        else:
+            loss.backward()
 
         optimizer.step()
 
         epoch_loss += loss.item()
         epoch_acc += acc.item()
 
-    return epoch_loss / len(iterator), epoch_acc / len(iterator)
+    return epoch_loss / (2*len(iterator)), epoch_acc / (2*len(iterator))
 
 
 def evaluate(model, iterator, criterion):
@@ -97,15 +107,22 @@ def evaluate(model, iterator, criterion):
     with torch.no_grad():
         for batch in iterator:
             predictions = model(batch.text).squeeze(1)
+            predictions_orig = model(batch.orig_sen).squeeze(1)
+            predictions = torch.cat((predictions, predictions_orig), 0)
+            labels = torch.cat((torch.FloatTensor(batch.label.numpy()), torch.FloatTensor(batch.label.numpy())), 0)
 
-            loss = criterion(predictions, torch.FloatTensor(batch.label.numpy()))
+            loss = criterion(predictions, labels)
 
-            acc = binary_accuracy(predictions, torch.FloatTensor(batch.label.numpy()))
+            # acc = binary_accuracy(predictions, torch.FloatTensor(batch.label.numpy()))
+            acc = binary_accuracy(predictions, labels)
 
-            epoch_loss += loss.item()
+            if opt.enable_sample_reweighting:
+                epoch_loss += float(loss.mean())
+            else:
+                epoch_loss += loss.item()
             epoch_acc += acc.item()
 
-    return epoch_loss / len(iterator), epoch_acc / len(iterator)
+    return epoch_loss / (2*len(iterator)), epoch_acc / (2*len(iterator))
 
 
 def binary_accuracy(preds, y):
@@ -164,12 +181,27 @@ LABEL = data.Field(sequential=False, unk_token=None)
 train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
 logging.info('train and test data created')
 
+# create the iterators.
+BATCH_SIZE = 50
+
 if not opt.train_on_other_dataset == '':
     train_data = torchtext.data.TabularDataset(
         path=opt.train_on_other_dataset, format='csv', skip_header=True,
-        fields=[('', None),('orig_sen', None), ('text', TEXT), ('label', LABEL)],
+        fields=[('', None),('orig_sen', TEXT), ('text', TEXT), ('label', LABEL)],
     )
+    # train_data_paraphrase = torchtext.data.TabularDataset(
+    #     path=opt.train_on_other_dataset, format='csv', skip_header=True,
+    #     fields=[('', None), ('orig_sen', None), ('text', TEXT), ('label', LABEL)],
+    # )
     train_data, valid_data = train_data.split(random_state=random.seed(200))
+    # train_data_para, valid_data_para = train_data_paraphrase.split(random_state=random.seed(200))
+    # train_iterator_para, valid_iterator_para = data.BucketIterator.splits(
+    #     (train_data_para, valid_data_para),
+    #     sort=False,
+    #     sort_within_batch=False,
+    #     batch_size=BATCH_SIZE,
+    #     device=-1)
+    logging.info('Created iterator for train and test para')
     logging.info('train and valid data loaded from external file')
 else:
     train_data, valid_data = train_data.split(random_state=random.seed(200))
@@ -186,8 +218,6 @@ else:
 LABEL.build_vocab(train_data)
 logging.info('Vocab built')
 
-# create the iterators.
-BATCH_SIZE = 64
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 logging.info('Device Selected %s' % (str(device)))
@@ -260,7 +290,10 @@ if opt.load_model is None or opt.load_model == "":
     elif opt.model_to_use == "first":
         optimizer = optim.SGD(model.parameters(), lr=1e-3)
 
-    criterion = nn.BCEWithLogitsLoss()
+    if not opt.enable_sample_reweighting:
+        criterion = nn.BCEWithLogitsLoss()
+    else:
+        criterion = nn.BCEWithLogitsLoss(reduction='none')
 
     model = model.to(device)
     criterion = criterion.to(device)
@@ -276,7 +309,7 @@ if opt.load_model is None or opt.load_model == "":
             model.save_model('binary_classification_rnn_' + str(epoch) + '.ckpt')
         elif opt.model_to_use == "fourth":
             if not opt.train_on_other_dataset == '':
-                model.save_model('binary_classification_cnn_COPYNET' + str(epoch) + '.ckpt')
+                model.save_model('binary_classification_cnn_COPYNET_augment' + str(epoch) + '.ckpt')
             else:
                 model.save_model('binary_classification_cnn_' + str(epoch) + '.ckpt')
         elif opt.model_to_use == "second":
