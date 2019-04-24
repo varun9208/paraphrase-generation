@@ -2,6 +2,12 @@ from nltk.translate.bleu_score import sentence_bleu
 from nltk.translate.bleu_score import corpus_bleu
 import pandas as pd
 import ast
+import logging
+
+LOG_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
+logging.basicConfig(format=LOG_FORMAT, level=getattr(logging, 'INFO'),
+                            filename='bleu_scores_of_augment_data',
+                            filemode='w')
 
 
 
@@ -54,15 +60,13 @@ def get_BLEU_score_of_corpus(filename, full_sentence = False):
 # print(get_BLEU_score_of_corpus('test_ptr_net_dataset.csv'))
 # print(get_BLEU_score_of_corpus('test_copy_net_dataset.csv'))
 
-print(get_BLEU_score_of_corpus('train_augment_dataset_only_attn.csv',full_sentence=True))
-print(get_BLEU_score_of_corpus('train_augment_dataset_ptr_net.csv',full_sentence=True))
-print(get_BLEU_score_of_corpus('train_augment_dataset_ptr_copynet.csv',full_sentence=True))
 
-
-print(get_BLEU_score_of_corpus('train_augment_dataset_only_attn.csv'))
-print(get_BLEU_score_of_corpus('train_augment_dataset_ptr_net.csv'))
-print(get_BLEU_score_of_corpus('train_augment_dataset_ptr_copynet.csv'))
-
+attn = get_BLEU_score_of_corpus('train_augment_dataset_only_attn.csv', full_sentence=True)
+logging.info('For SEQ2SEQ only with ATTN:- %s', attn)
+ps = get_BLEU_score_of_corpus('train_augment_dataset_ptr_net.csv', full_sentence=True)
+logging.info('For SEQ2SEQ with Pointer softmax:- %s', ps)
+copynet = get_BLEU_score_of_corpus('train_augment_dataset_ptr_copynet.csv', full_sentence=True)
+logging.info('For SEQ2SEQ with Copynet:- %s', copynet)
 
 
 
